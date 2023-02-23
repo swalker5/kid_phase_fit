@@ -8,6 +8,7 @@ save:
    use_save_fig:  False
    use_save_pdf:  False
    use_save_file: False
+   save_name: test1
 
 weight:
    window_Qr:   12000
