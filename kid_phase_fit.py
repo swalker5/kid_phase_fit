@@ -1962,7 +1962,18 @@ if __name__ == "__main__":
         print(np.shape(tone_amps_all)[1])
         
         powlist_full = np.asarray(-1.*drive_atten)
-        powlist = np.asarray(-1.*drive_atten[9:-1])
+        powlist_start = config['fit_settings']['powlist_start']
+        powlist_end = config['fit_settings']['powlist_end']
+        
+        print('powlist range:', powlist_start, powlist_end)
+        if (powlist_start == None) and (powlist_end == None):
+            powlist = np.asarray(-1.*drive_atten)
+        elif (powlist_start != None) and (powlist_end != None):
+            powlist = np.asarray(-1.*drive_atten[int(powlist_start):int(powlist_end)])
+        elif (powlist_start != None):
+            powlist = np.asarray(-1.*drive_atten[int(powlist_start):])
+        elif (powlist_end != None):
+            powlist = np.asarray(-1.*drive_atten[:int(powlist_end)])
         
         #use_window_width = tone_freq_lo_all[0]/window_Qr
 
@@ -2097,7 +2108,7 @@ if __name__ == "__main__":
         
         csv_columns = ['tone_num','drive_atten','drive_atten_flag','fit_flags'] # 0 is good, 1 is bag
         rows = zip(tone_range, Pro_guess_dBm_list_pos, a_predict_flag_all, flag_list_all)
-        with open('driveatten_' + sweep_name_1 + '_' + config['save']['save_name'] + '.csv', 'w') as f: #csvfile:
+        with open('drive_atten_' + sweep_name_1 + '_' + config['save']['save_name'] + '.csv', 'w') as f: #csvfile:
             writer = csv.writer(f)
             writer.writerow(csv_columns)
             for row in rows:
