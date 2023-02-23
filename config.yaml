@@ -30,7 +30,7 @@ flag_settings:
 fit_settings:
    # leave powlist_start(end) blank to fit all drive attenuations
    powlist_start: 9 # int
-   powlist_end:  -1 # int
+   powlist_end:  -1 # int, should be negative
    numspan:       1 # default: 2
    
    # options: all # for all tones  OR 
