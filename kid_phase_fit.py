@@ -367,7 +367,7 @@ class ResonanceFitterSingleTone():
         nonlinear phase fit (user-specified) on a single tone
     '''
     def __init__(self,f,z,tau,numspan=2,tone_freq_lo=0,window_width=0,\
-                 pherr_threshold_num=10,flag_threshold=0.2,\
+                 pherr_threshold_num=10,pherr_threshold=0.2,\
                  verbose=False,**keywords):
         # f in Hz (will also work with GHz?), z is complex, tau in ns
         ''' fit the resonance following method described in Jiansong Gao thesis Appendix E
@@ -382,7 +382,7 @@ class ResonanceFitterSingleTone():
         self.numspan = numspan
         self.ang = phase2(self.z)
         self.pherr_threshold_num = int(pherr_threshold_num)
-        self.flag_threshold = flag_threshold
+        self.pherr_threshold = pherr_threshold
 
         # new argument for specifying output to print to user
         self.verbose = verbose
@@ -955,7 +955,7 @@ class ResonanceFitterSingleTone():
         #print('f0id',result['f0id'])
 
         if flag == 0:
-            if sum(np.abs(result['pherr']) > self.flag_threshold) > self.pherr_threshold_num:
+            if sum(np.abs(result['pherr']) > self.pherr_threshold) > self.pherr_threshold_num:
                 flag = 2
 
         result['flag'] = flag
@@ -1072,7 +1072,7 @@ class ResonanceFitterSingleTonePowSweep():
     def __init__(self,filedir,data,res,tone_freq_lo,powlist_full,powlist,\
                  tau,numspan=2,window_width=0,a_predict_pow=-11.,\
                  a_predict_guess=0.2,a_predict_threshold=0.2,\
-                 pherr_threshold_num = 10,flag_threshold=0.2,\
+                 pherr_threshold_num = 10,pherr_threshold=0.2,\
                  verbose=False,save_fig=False,save_pdf=False,\
                  filename='toltec',**keywords):
         # f in Hz (will also work with GHz?), z is complex, tau in ns
@@ -1098,7 +1098,7 @@ class ResonanceFitterSingleTonePowSweep():
         self.a_predict_guess = a_predict_guess
         self.a_predict_threshold = a_predict_threshold
 
-        self.flag_threshold = flag_threshold # as a percentage of the phase fit residuals # sets pherr threshold
+        self.pherr_threshold = pherr_threshold # as a percentage of the phase fit residuals # sets pherr threshold
         self.pherr_threshold_num = int(pherr_threshold_num) # sets number of points allowed above pherr threshold before flagging
 
         # new argument for specifying output to print to user
@@ -1224,7 +1224,7 @@ class ResonanceFitterSingleTonePowSweep():
             self.z[kk_p] = z_temp*self.corr
             if self.use_weight:
                 try:
-                    self.result[kk_p] = ResonanceFitterSingleTone(self.f[kk_p],self.z[kk_p],self.tau,self.numspan,self.tone_freq_lo,self.window_width,pherr_threshold_num=self.pherr_threshold_num,flag_threshold=self.flag_threshold,result0=self.result0,weight_type=self.weight_type)
+                    self.result[kk_p] = ResonanceFitterSingleTone(self.f[kk_p],self.z[kk_p],self.tau,self.numspan,self.tone_freq_lo,self.window_width,pherr_threshold_num=self.pherr_threshold_num,pherr_threshold=self.pherr_threshold,result0=self.result0,weight_type=self.weight_type)
                     self.fit_flag[kk_p] = 0
                     pass
                 except:
@@ -2022,14 +2022,14 @@ if __name__ == "__main__":
                     all_fits[ii] = ResonanceFitterSingleTonePowSweep(0,data_pow_sweep,ii,tone_freq_lo_all[0][ii],powlist_full,powlist,\
                                                                      tau,numspan=use_numspan,window_width=0,\
                                                                      a_predict_guess=use_a_predict_guess,a_predict_threshold=use_a_predict_threshold,\
-                                                                     flag_threshold=use_pherr_threshold,pherr_threshold_num=use_pherr_threshold_num,\
+                                                                     pherr_threshold=use_pherr_threshold,pherr_threshold_num=use_pherr_threshold_num,\
                                                                      save_fig=use_save_fig,save_pdf=use_save_pdf,filename=save_dir+sweep_name_1)
                 else:
                     use_window_width = tone_freq_lo_all[0]/window_Qr
                     all_fits[ii] = ResonanceFitterSingleTonePowSweep(0,data_pow_sweep,ii,tone_freq_lo_all[0][ii],powlist_full,powlist,\
                                                                      tau,numspan=use_numspan,window_width=use_window_width[ii],\
                                                                      a_predict_guess=use_a_predict_guess,a_predict_threshold=use_a_predict_threshold,\
-                                                                     flag_threshold=use_pherr_threshold,pherr_threshold_num=use_pherr_threshold_num,\
+                                                                     pherr_threshold=use_pherr_threshold,pherr_threshold_num=use_pherr_threshold_num,\
                                                                      save_fig=use_save_fig,save_pdf=use_save_pdf,filename=save_dir+sweep_name_1,\
                                                                      weight_type=use_weight_type)
                 results_all = {}
