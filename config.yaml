@@ -1,7 +1,7 @@
-load:
-   home_dir:   /home/sam/Downloads/autodrive_data_17067_17068_toltec0/
-   save_dir:   /home/sam/Downloads/
-   fig_dir:    /home/sam/Downloads/autodrive_data_17067_17068_toltec0/figures_test/
+load: # need to change these to correspond to your folders
+   home_dir:   /home/sam/Downloads/kid_phase_fit/test_data/
+   save_dir:   /home/sam/Downloads/kid_phase_fit/
+   fig_dir:    /home/sam/Downloads/kid_phase_fit/
    sweep_name: toltec0_017068
 
 save:
