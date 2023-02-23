@@ -1,0 +1,27 @@
+load:
+   home_dir:   /home/sam/Downloads/autodrive_data_17067_17068_toltec0/
+   save_dir:   /home/sam/Downloads/
+   fig_dir:    /home/sam/Downloads/autodrive_data_17067_17068_toltec0/figures_test/
+   sweep_name: toltec0_017068
+
+save:
+   use_save_fig:  False
+   use_save_pdf:  False
+   use_save_file: False
+
+weight:
+   window_Qr:   12000
+   weight_type: #lorentz # optional, options are lorentz, gauss
+
+flag_settings:
+   a_predict_guess:     0.2 # default: 0.2
+   a_predict_threshold: 0.25 # default: 0.25
+   pherr_threshold:     5 # default: 10
+   
+fit_settings:
+   numspan: 1 # default: 2
+   
+   # options: all # for all tones  OR 
+   # a list of tones/integers OR 
+   # a single tone/integer
+   tone_range: [0,1,2,3,4,5,6,7,8,9,10] #all
