@@ -367,7 +367,7 @@ class ResonanceFitterSingleTone():
         nonlinear phase fit (user-specified) on a single tone
     '''
     def __init__(self,f,z,tau,numspan=2,tone_freq_lo=0,window_width=0,\
-                 pherr_threshold_num=10,flag_threshold=0.15,\
+                 pherr_threshold_num=10,flag_threshold=0.2,\
                  verbose=False,**keywords):
         # f in Hz (will also work with GHz?), z is complex, tau in ns
         ''' fit the resonance following method described in Jiansong Gao thesis Appendix E
@@ -1071,8 +1071,8 @@ class ResonanceFitterSingleTonePowSweep():
     '''
     def __init__(self,filedir,data,res,tone_freq_lo,powlist_full,powlist,\
                  tau,numspan=2,window_width=0,a_predict_pow=-11.,\
-                 a_predict_guess=0.25,a_predict_threshold=0.2,\
-                 pherr_threshold_num = 10,flag_threshold=0.15,\
+                 a_predict_guess=0.2,a_predict_threshold=0.2,\
+                 pherr_threshold_num = 10,flag_threshold=0.2,\
                  verbose=False,save_fig=False,save_pdf=False,\
                  filename='toltec',**keywords):
         # f in Hz (will also work with GHz?), z is complex, tau in ns
@@ -1098,8 +1098,8 @@ class ResonanceFitterSingleTonePowSweep():
         self.a_predict_guess = a_predict_guess
         self.a_predict_threshold = a_predict_threshold
 
-        self.pherr_threshold_num = int(pherr_threshold_num)
-        self.flag_threshold = flag_threshold # as a percentage of the phase fit residuals
+        self.flag_threshold = flag_threshold # as a percentage of the phase fit residuals # sets pherr threshold
+        self.pherr_threshold_num = int(pherr_threshold_num) # sets number of points allowed above pherr threshold before flagging
 
         # new argument for specifying output to print to user
         self.verbose = verbose
@@ -1974,6 +1974,8 @@ if __name__ == "__main__":
             powlist = np.asarray(-1.*drive_atten[int(powlist_start):])
         elif (powlist_end != None):
             powlist = np.asarray(-1.*drive_atten[:int(powlist_end)])
+        else:
+            print('Invalid powlist range given')
         
         #use_window_width = tone_freq_lo_all[0]/window_Qr
 
@@ -1989,7 +1991,8 @@ if __name__ == "__main__":
 
         use_a_predict_guess = config['flag_settings']['a_predict_guess'] # 0.2
         use_a_predict_threshold = config['flag_settings']['a_predict_threshold'] #0.25 #0.2 #0.15 # lower is more stringent
-        use_pherr_threshold = config['flag_settings']['pherr_threshold'] #5 # 10 by default # doesn't seem to change things much
+        use_pherr_threshold = config['flag_settings']['pherr_threshold']
+        use_pherr_threshold_num = config['flag_settings']['pherr_threshold_num'] #5 # 10 by default # doesn't seem to change things much
         
         use_numspan = config['fit_settings']['numspan'] #1
 
@@ -2019,14 +2022,14 @@ if __name__ == "__main__":
                     all_fits[ii] = ResonanceFitterSingleTonePowSweep(0,data_pow_sweep,ii,tone_freq_lo_all[0][ii],powlist_full,powlist,\
                                                                      tau,numspan=use_numspan,window_width=0,\
                                                                      a_predict_guess=use_a_predict_guess,a_predict_threshold=use_a_predict_threshold,\
-                                                                     flag_threshold=use_a_predict_threshold,pherr_threshold_num=use_pherr_threshold,\
+                                                                     flag_threshold=use_pherr_threshold,pherr_threshold_num=use_pherr_threshold_num,\
                                                                      save_fig=use_save_fig,save_pdf=use_save_pdf,filename=save_dir+sweep_name_1)
                 else:
                     use_window_width = tone_freq_lo_all[0]/window_Qr
                     all_fits[ii] = ResonanceFitterSingleTonePowSweep(0,data_pow_sweep,ii,tone_freq_lo_all[0][ii],powlist_full,powlist,\
                                                                      tau,numspan=use_numspan,window_width=use_window_width[ii],\
                                                                      a_predict_guess=use_a_predict_guess,a_predict_threshold=use_a_predict_threshold,\
-                                                                     flag_threshold=use_a_predict_threshold,pherr_threshold_num=use_pherr_threshold,\
+                                                                     flag_threshold=use_pherr_threshold,pherr_threshold_num=use_pherr_threshold_num,\
                                                                      save_fig=use_save_fig,save_pdf=use_save_pdf,filename=save_dir+sweep_name_1,\
                                                                      weight_type=use_weight_type)
                 results_all = {}
