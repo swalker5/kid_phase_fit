@@ -10,25 +10,29 @@ save:
    use_save_fig:  False
    use_save_pdf:  False
    use_save_file: False
-   save_name: test1
+   save_name:     test1
 
 weight:
-   window_Qr:   12000
+   window_Qr: 12000
+   
    # optional, options are lorentz OR
    # gauss, OR
    # leave blank to turn option off
    weight_type:
 
 flag_settings:
-   a_predict_guess:     0.2  # default: 0.2
-   a_predict_threshold: 0.25 # default: 0.25
-   pherr_threshold:     5    # default: 10
+   a_predict_guess:     0.2  # nonlinearity parameter to set to, default to 0.2
+   a_predict_threshold: 0.25 # nonlinearity parameter guess accuracy, default to 0.25
+   pherr_threshold:     0.25 # related to the percent the fit is off from the data, default is 0.15
+   pherr_threshold_num: 5    # number of points allowed above pherr threshold, default to 10
+   
    
 fit_settings:
    # leave powlist_start(end) blank to fit all drive attenuations
    powlist_start: 9 # int
-   powlist_end: -1 # int
-   numspan: 1 # default: 2
+   powlist_end:  -1 # int
+   numspan:       1 # default: 2
+   
    # options: all # for all tones  OR 
    # any list of tones/integers OR 
    # a single tone/integer
