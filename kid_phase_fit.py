@@ -1,5 +1,5 @@
 '''
-kid_phase_fit_new.py
+kid_phase_fit.py
 
 SW 2/2023
 '''
@@ -2050,7 +2050,7 @@ if __name__ == "__main__":
 
         if use_save_pdf:
             plt.ioff()
-            with PdfPages('fits_skyv1-1_' + sweep_name_1 + '_test.pdf') as pdf:
+            with PdfPages('fits_' + sweep_name_1 + '_' + config['save']['save_name'] + '.pdf') as pdf:
                 for ii in tone_range:
                     print('saving figures in pdf for res' + str(ii))
                     ctx = all_fits[ii].plot()
@@ -2097,7 +2097,7 @@ if __name__ == "__main__":
         
         csv_columns = ['tone_num','drive_atten','drive_atten_flag','fit_flags'] # 0 is good, 1 is bag
         rows = zip(tone_range, Pro_guess_dBm_list_pos, a_predict_flag_all, flag_list_all)
-        with open(sweep_name_1 + '_driveatten.csv', 'w') as f: #csvfile:
+        with open('driveatten_' + sweep_name_1 + '_' + config['save']['save_name'] + '.csv', 'w') as f: #csvfile:
             writer = csv.writer(f)
             writer.writerow(csv_columns)
             for row in rows:
@@ -2115,7 +2115,7 @@ if __name__ == "__main__":
                    }
         # is all_fits the problem? # # 'fits': all_fits, (yes, saving data in a weird format) # just saving result from class which contains fit and some other info, other variables?
         if use_save_file:
-            with open('fits_skyv1-1_' + sweep_name_1 + '_lorentz_weight.pkl', 'wb') as handle:
+            with open('fits_' + sweep_name_1 + '_' + config['save']['save_name'] + '.pkl', 'wb') as handle:
                 pickle.dump(a_save, handle)
         elapsed_time = timer() - start
         print('elapsed time',elapsed_time)
