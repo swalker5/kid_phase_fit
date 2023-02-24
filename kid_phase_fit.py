@@ -1923,7 +1923,15 @@ if __name__ == "__main__":
         tau_per_network = [-36.2,-34.4,-34.8,-34.7,-34.6,-41.3,-39.2,\
                            -32.3,-31.,-31.,-37.4,-39.3] # no network 10
         tau = tau_per_network[network_num] #-58.5
-        window_Qr = config['weight']['window_Qr'] #12000
+        
+        # window to applying weighting to in fit
+        if config['weight']['window_Qr'] == None:
+            print('Using default window_Qr in fit weighting')
+            window_Qr = 12000
+        else:
+            window_Qr = config['weight']['window_Qr']
+
+        # if use_weight_type == None, fit weighting is turned off
         use_weight_type = config['weight']['weight_type']
 
         start = timer()
@@ -1966,6 +1974,11 @@ if __name__ == "__main__":
         powlist_end = config['fit_settings']['powlist_end']
         
         print('powlist range:', powlist_start, powlist_end)
+        if isinstance(powlist_end, (int or float)):
+            if powlist_end > 0:
+                print('powlist_end needs to be negative, multiplying by -1')
+                powlist_end = int(-1*powlist_end)
+        
         if (powlist_start == None) and (powlist_end == None):
             powlist = np.asarray(-1.*drive_atten)
         elif (powlist_start != None) and (powlist_end != None):
@@ -1989,19 +2002,41 @@ if __name__ == "__main__":
         all_flags = {}
         all_bif = {}
 
-        use_a_predict_guess = config['flag_settings']['a_predict_guess'] # 0.2
-        use_a_predict_threshold = config['flag_settings']['a_predict_threshold'] #0.25 #0.2 #0.15 # lower is more stringent
-        use_pherr_threshold = config['flag_settings']['pherr_threshold']
-        use_pherr_threshold_num = config['flag_settings']['pherr_threshold_num'] #5 # 10 by default # doesn't seem to change things much
-        
-        use_numspan = config['fit_settings']['numspan'] #1
+        # desired nonlinearity parameter
+        if config['flag_settings']['a_predict_guess'] == None:
+            print('Using default a_predict_guess')
+            use_a_predict_guess = 0.2
+        else:
+            use_a_predict_guess = config['flag_settings']['a_predict_guess']
+            
+        # percent that a_predict_guess is off from data, lower will be more stringent
+        if config['flag_settings']['a_predict_threshold'] == None:
+            print('Using default a_predict_threshold')
+            use_a_predict_threshold = 0.2 
+        else:
+            use_a_predict_threshold = config['flag_settings']['a_predict_threshold']
+            
+        # percent that the phase fit is off from data
+        if config['flag_settings']['pherr_threshold'] == None:
+            print('Using default pherr_threshold')
+            use_pherr_threshold = 0.2
+        else:
+            use_pherr_threshold = config['flag_settings']['pherr_threshold']
+            
+        # number of points allowed above pherr_threshold
+        if config['flag_settings']['pherr_threshold_num'] == None:
+            print('Using default pherr_threshold_num')
+            use_pherr_threshold_num = 10 # doesn't seem to change things much
+        else:
+            use_pherr_threshold_num = int(config['flag_settings']['pherr_threshold_num'])
+            
+        # number of linewidths to fit
+        if config['fit_settings']['numspan'] == None:
+            print('Using default numspan')
+            use_numspan = 2
+        else:
+            use_numspan = int(config['fit_settings']['numspan'])
 
-        a_predict_flag_all = []
-        Pro_guess_dBm_list = []
-
-        f0_corr_all_from_mean = []
-        f0_corr_all_from_median = []
-        flag_list_all = []
         
         print(np.shape(data_pow_sweep))
         if config['fit_settings']['tone_range'] == 'all':
@@ -2013,6 +2048,12 @@ if __name__ == "__main__":
         else:
             print('Invalid tone_range specified in config')
 
+        a_predict_flag_all = []
+        Pro_guess_dBm_list = []
+
+        f0_corr_all_from_mean = []
+        f0_corr_all_from_median = []
+        flag_list_all = []
         
         # need to think of better fix than setting filedir to 0
         for ii in tone_range:
