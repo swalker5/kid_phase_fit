@@ -2081,9 +2081,10 @@ if __name__ == "__main__":
                         pass
                 all_fits_2[ii] = results_all
                 
-                #all_fits[ii].plot()
-                #all_fits[ii].plot_fit_results()
-                #all_fits[ii].plot_iq_rect([-15,-11])
+                if config['preview']['show_plots']:
+                    all_fits[ii].plot()
+                    all_fits[ii].plot_fit_results()
+                    all_fits[ii].plot_iq_rect([powlist[0],powlist[-4]]) # -15, -11
                 
                 # avoid using negative bif values
                 print(all_fits[ii].a_predict,all_fits[ii].a_predict_pow2,all_fits[ii].Pro_test_low_dBm)
