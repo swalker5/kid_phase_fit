@@ -12,6 +12,9 @@ save:
    use_save_pdf:  False
    use_save_file: False
    save_name:     test1
+   
+preview:
+   show_plots: True
 
 weight:
    window_Qr: 12000 # int or float, window to applying weighting to in fit, default is 12000
