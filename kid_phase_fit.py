@@ -804,7 +804,7 @@ class ResonanceFitterSingleTone():
             popt, pcov, fit_result, x0_result, xt, uncertainty_angt = self.fitphasenlintest2(ft, angt, Qgg, alphag, f00g, phig, estv['r'], zt)
 
         if np.mean(popt) == 1.:
-            flag = 1.
+            flag = 1
         else:
             flag = 0
 
@@ -1250,10 +1250,10 @@ class ResonanceFitterSingleTonePowSweep():
             self.omega_r[kk_p] = self.omega_r_0 + (2.*np.pi*self.result[kk_p].result['f0_corr'] - self.omega_r_0)
             self.E_star[kk_p] = 2.*self.result[kk_p].result['Q']**3*self.powlist_W[kk]/(self.result[kk_p].result['Qc']*self.omega_r[kk_p]*self.result[kk_p].result['bif'])
 
-            self.fit_flag_list.append(self.fit_flag[kk_p])
+            self.fit_flag_list.append(self.fit_flag[kk_p]) # 0 fit data, 1 skipped fitting
             self.E_star_list.append(self.E_star[kk_p])
             self.bif_list.append(self.result[kk_p].result['bif'])
-            self.flag_list.append(self.result[kk_p].result['flag'])
+            self.flag_list.append(self.result[kk_p].result['flag']) # 0 good, 1 failed to fit data, 2 fit residuals above thresholds
 
             self.z1[kk_p] = removecable(self.f[kk_p],self.z[kk_p],self.tau,verbose=self.verbose)
             self.f0g[kk_p], self.Qg[kk_p], self.idf0[kk_p], self.iddf[kk_p] = estpara3(self.f[kk_p],self.z1[kk_p],verbose=self.verbose,result0=self.result0)
@@ -1288,8 +1288,8 @@ class ResonanceFitterSingleTonePowSweep():
         #print('flags', np.asarray(self.bif_list[1:])[self.flag_filter].size)
         #print('pos bif', np.asarray(self.bif_list[1:])[self.bif_neg_filter].size)
         self.bif_flag_filter = (np.asarray(self.flag_list[1:]) != 2) & (np.asarray(self.bif_list[1:]) > 0)
-        print('fit flags', np.asarray(self.fit_flag_list))
-        print('all flags', np.asarray(self.flag_list))
+        print('fit success', np.asarray(self.fit_flag_list))
+        print('fit flags', np.asarray(self.flag_list))
         print('all bif', np.asarray(self.bif_list))
         print('pos bif', np.asarray(self.bif_list[1:])[self.bif_flag_filter])
         if np.asarray(self.bif_list[1:])[self.flag_filter].size == 0:
@@ -1312,7 +1312,7 @@ class ResonanceFitterSingleTonePowSweep():
              self.Pro_test_low_guess = 0
              self.Pro_test_low_guess_dBm = 0
              self.a_predict_flag = 1
-        else:
+        else: # 3/14/23: make a function to skip poor fits in this calculation?
              self.bif_list_pos = np.abs(self.bif_list)
              self.E_star_2 = np.mean(np.asarray(self.E_star_list[1:])[self.bif_flag_filter])
              self.a_predict = np.asarray(self.bif_list[1:])[self.bif_flag_filter][0]
@@ -1373,7 +1373,7 @@ class ResonanceFitterSingleTonePowSweep():
         for kk in self.powlist:
             if self.fit_flag[kk] == 1:
                 pass
-            elif self.result[kk].result['flag'] == 1.:
+            elif self.result[kk].result['flag'] == 1:
                 pass
             else:
                 z_circlefit = self.zc[kk]+self.r[kk]*np.e**(1.j*s)
@@ -1443,7 +1443,7 @@ class ResonanceFitterSingleTonePowSweep():
         for kk in show_powlist:
             if self.fit_flag[kk] == 1:
                 pass
-            elif self.result[kk].result['flag'] == 1.:
+            elif self.result[kk].result['flag'] == 1:
                 pass
             else:
                 plt.plot(self.f[kk],logmag(self.z1[kk]), marker='.',linestyle='None') #,'o-') # bo
@@ -1454,8 +1454,15 @@ class ResonanceFitterSingleTonePowSweep():
                 plt.plot(self.f[kk][self.result[kk].result['f00id']],logmag(self.z1[kk])[self.result[kk].result['f00id']],'mo')
         plt.xlabel('Frequency (Hz)')
         plt.ylabel('$|S_{21}|^2$')
+        
         plt.tight_layout()
-        plt.show()
+        
+        if self.save_fig:
+            plt.savefig(self.filename + '_res' + str(self.res) + '_mag.png', format='png') # dpi=600
+        elif self.save_pdf:
+            pass
+        else:
+            plt.show()
 
 
     def plot_iq(self,show_powlist):
@@ -1468,7 +1475,7 @@ class ResonanceFitterSingleTonePowSweep():
         for kk in show_powlist:
             if self.fit_flag[kk] == 1:
                 pass
-            elif self.result[kk].result['flag'] == 1.:
+            elif self.result[kk].result['flag'] == 1:
                 pass
             else:
                 z_circlefit = self.zc[kk]+self.r[kk]*np.e**(1.j*s)
@@ -1487,8 +1494,15 @@ class ResonanceFitterSingleTonePowSweep():
                 ax.plot(self.result[kk].result['ang'][self.result[kk].result['f0id']],np.abs(self.z2[kk][self.result[kk].result['f0id']]),'ko')
                 # f0 from fit
                 ax.plot(self.result[kk].result['ang'][self.result[kk].result['f00id']],np.abs(self.z2[kk][self.result[kk].result['f00id']]),'mo')
+        
         plt.tight_layout()
-        plt.show()
+        
+        if self.save_fig:
+            plt.savefig(self.filename + '_res' + str(self.res) + '_iq.png', format='png') # dpi=600
+        elif self.save_pdf:
+            pass
+        else:
+            plt.show()
 
     
     def plot_iq_rect(self,show_powlist):
@@ -1501,7 +1515,7 @@ class ResonanceFitterSingleTonePowSweep():
         for kk in show_powlist:
             if self.fit_flag[kk] == 1:
                 pass
-            elif self.result[kk].result['flag'] == 1.:
+            elif self.result[kk].result['flag'] == 1:
                 pass
             else:
                 # plotting z
@@ -1526,8 +1540,15 @@ class ResonanceFitterSingleTonePowSweep():
                 #plt.plot(self.z2[kk].real[self.result[kk].result['f00id']],self.z2[kk].imag[self.result[kk].result['f00id']],'mo')
         plt.xlabel('I (adu)')
         plt.ylabel('Q (adu)')
+        
         plt.tight_layout()
-        plt.show()
+        
+        if self.save_fig:
+            plt.savefig(self.filename + '_res' + str(self.res) + '_iq_rect.png', format='png') # dpi=600
+        elif self.save_pdf:
+            pass
+        else:
+            plt.show()
 
     def plot_phase(self,show_powlist):
         if isinstance(show_powlist, int) or isinstance(show_powlist, float):
@@ -1537,7 +1558,7 @@ class ResonanceFitterSingleTonePowSweep():
         for kk in show_powlist:
             if self.fit_flag[kk] == 1:
                 pass
-            elif self.result[kk].result['flag'] == 1.:
+            elif self.result[kk].result['flag'] == 1:
                 pass
             else:
                 plt.plot(self.f[kk],self.result[kk].result['ang'],'.')
@@ -1556,8 +1577,15 @@ class ResonanceFitterSingleTonePowSweep():
                 plt.plot(self.f[kk][self.result[kk].result['f00id']],self.result[kk].result['ang'][self.result[kk].result['f00id']],'mo')
         plt.xlabel('Frequency (Hz)')
         plt.ylabel('Residuals (rad)')
+        
         plt.tight_layout()
-        plt.show()
+        
+        if self.save_fig:
+            plt.savefig(self.filename + '_res' + str(self.res) + '_phase.png', format='png') # dpi=600
+        elif self.save_pdf:
+            pass
+        else:
+            plt.show()
 
 
     def plot_pherr(self,show_powlist):
@@ -1565,15 +1593,24 @@ class ResonanceFitterSingleTonePowSweep():
             show_powlist = [show_powlist]
 
         plt.figure()
-        for kk in show_powlist: # self.powlist
-            if self.result[kk].result['flag'] == 1.:
+        for kk in show_powlist:
+            if self.fit_flag[kk] == 1:
+                pass
+            elif self.result[kk].result['flag'] == 1:
                 pass
             else:
                 plt.plot(self.result[kk].result['ft'],self.result[kk].result['pherr']) # self.angle - self.fitted_angle
         plt.xlabel('Frequency (Hz)')
         plt.ylabel('Residuals (rad)')
+        
         plt.tight_layout()
-        plt.show()
+        
+        if self.save_fig:
+            plt.savefig(self.filename + '_res' + str(self.res) + '_pherr.png', format='png') # dpi=600
+        elif self.save_pdf:
+            pass
+        else:
+            plt.show()
 
 
     def plot_fit_results(self):
@@ -1583,7 +1620,7 @@ class ResonanceFitterSingleTonePowSweep():
         for kk in self.powlist:
             if self.fit_flag[kk] == 1:
                 pass
-            elif self.result[kk].result['flag'] == 1.:
+            elif self.result[kk].result['flag'] == 1:
                 pass
             else:
                 # fr vs microwave power
@@ -1908,7 +1945,8 @@ if __name__ == "__main__":
 	
         # for data
         sweep_dir_1 = config['load']['home_dir']
-        save_dir = config['load']['fig_dir']
+        save_dir = config['load']['save_dir']
+        fig_dir = config['load']['fig_dir']
         sweep_name_1 = config['load']['sweep_name']
         split_sweep = sweep_name_1.split('_')
         network_num = int(''.join(filter(str.isdigit, split_sweep[0])))
@@ -2053,6 +2091,7 @@ if __name__ == "__main__":
 
         f0_corr_all_from_mean = []
         f0_corr_all_from_median = []
+        fit_success_list_all = []
         flag_list_all = []
         
         # need to think of better fix than setting filedir to 0
@@ -2064,14 +2103,14 @@ if __name__ == "__main__":
                                                                      tau,numspan=use_numspan,window_width=0,\
                                                                      a_predict_guess=use_a_predict_guess,a_predict_threshold=use_a_predict_threshold,\
                                                                      pherr_threshold=use_pherr_threshold,pherr_threshold_num=use_pherr_threshold_num,\
-                                                                     save_fig=use_save_fig,save_pdf=use_save_pdf,filename=save_dir+sweep_name_1)
+                                                                     save_fig=use_save_fig,save_pdf=use_save_pdf,filename=fig_dir+sweep_name_1)
                 else:
                     use_window_width = tone_freq_lo_all[0]/window_Qr
                     all_fits[ii] = ResonanceFitterSingleTonePowSweep(0,data_pow_sweep,ii,tone_freq_lo_all[0][ii],powlist_full,powlist,\
                                                                      tau,numspan=use_numspan,window_width=use_window_width[ii],\
                                                                      a_predict_guess=use_a_predict_guess,a_predict_threshold=use_a_predict_threshold,\
                                                                      pherr_threshold=use_pherr_threshold,pherr_threshold_num=use_pherr_threshold_num,\
-                                                                     save_fig=use_save_fig,save_pdf=use_save_pdf,filename=save_dir+sweep_name_1,\
+                                                                     save_fig=use_save_fig,save_pdf=use_save_pdf,filename=fig_dir+sweep_name_1,\
                                                                      weight_type=use_weight_type)
                 results_all = {}
                 for jj in powlist:
@@ -2091,8 +2130,8 @@ if __name__ == "__main__":
                 print(all_fits[ii].a_predict_off)
                 a_predict_flag_all.append(all_fits[ii].a_predict_flag)
                 Pro_guess_dBm_list.append(all_fits[ii].Pro_test_low_guess_dBm)
-                flag_list_all.append(all_fits[ii].flag_list)
-                #fit_flag_list # what is the difference between flag_list and fit_flag_list (looks like flag_list is used more)
+                fit_success_list_all.append(all_fits[ii].fit_flag_list)
+                flag_list_all.append(all_fits[ii].flag_list) # used more
         
         if use_save_fig:
             plt.ioff()
@@ -2103,10 +2142,13 @@ if __name__ == "__main__":
 			
                 ctx2 = all_fits[ii].plot_fit_results()
                 plt.close(ctx2)
+                
+                ctx3 = all_fits[ii].plot_iq_rect(powlist)
+                plt.close(ctx3)
 
         if use_save_pdf:
             plt.ioff()
-            with PdfPages('fits_' + sweep_name_1 + '_' + config['save']['save_name'] + '.pdf') as pdf:
+            with PdfPages(save_dir + 'fits_' + sweep_name_1 + '_' + config['save']['save_name'] + '.pdf') as pdf:
                 for ii in tone_range:
                     print('saving figures in pdf for res' + str(ii))
                     ctx = all_fits[ii].plot()
@@ -2116,6 +2158,10 @@ if __name__ == "__main__":
                     ctx2 = all_fits[ii].plot_fit_results()
                     pdf.savefig(ctx2,dpi=100)
                     plt.close(ctx2)
+                    
+                    ctx3 = all_fits[ii].plot_iq_rect(powlist)
+                    pdf.savefig(ctx3,dpi=100)
+                    plt.close(ctx3)
 
         print(a_predict_flag_all)
         a_predict_flag_good_indices = np.where(np.asarray(a_predict_flag_all) == 0)
@@ -2151,9 +2197,9 @@ if __name__ == "__main__":
         Pro_guess_dBm_list_neg_indices = np.where(Pro_guess_dBm_list_pos < 0)
         Pro_guess_dBm_list_pos[Pro_guess_dBm_list_neg_indices] = -1.*Pro_guess_dBm_list_pos[Pro_guess_dBm_list_neg_indices]
         
-        csv_columns = ['tone_num','drive_atten','drive_atten_flag','fit_flags'] # 0 is good, 1 is bag
-        rows = zip(tone_range, Pro_guess_dBm_list_pos, a_predict_flag_all, flag_list_all)
-        with open('drive_atten_' + sweep_name_1 + '_' + config['save']['save_name'] + '.csv', 'w') as f: #csvfile:
+        csv_columns = ['tone_num','drive_atten','drive_atten_flag','fit_success','fit_flags'] # 0 is good, 1 is bag
+        rows = zip(tone_range, Pro_guess_dBm_list_pos, a_predict_flag_all, fit_success_list_all, flag_list_all)
+        with open(save_dir + 'drive_atten_' + sweep_name_1 + '_' + config['save']['save_name'] + '.csv', 'w') as f: #csvfile:
             writer = csv.writer(f)
             writer.writerow(csv_columns)
             for row in rows:
@@ -2167,11 +2213,11 @@ if __name__ == "__main__":
                    'f0_median': f0_corr_all_from_median, 'f0_mean_sorted': np.sort(f0_corr_all_from_mean),'f0_median_sorted': np.sort(f0_corr_all_from_median),\
                    'indices_mean_sorted': indices_mean_sorted, 'indices_median_sorted': indices_median_sorted, 'Pro_guess_dBm_mean': np.mean(Pro_guess_dBm_good),\
                    'Pro_guess_dBm_median': np.median(Pro_guess_dBm_good),'Pro_guess_dBm_std': np.std(Pro_guess_dBm_good),'drive_atten_mean': drive_atten_best_index_mean,\
-                   'drive_atten_median': drive_atten_best_index_median, 'fits': all_fits_2
+                   'drive_atten_median': drive_atten_best_index_median, 'fits': all_fits_2, 'fit_success': fit_success_list_all, 'fit_flags': flag_list_all
                    }
         # is all_fits the problem? # # 'fits': all_fits, (yes, saving data in a weird format) # just saving result from class which contains fit and some other info, other variables?
         if use_save_file:
-            with open('fits_' + sweep_name_1 + '_' + config['save']['save_name'] + '.pkl', 'wb') as handle:
+            with open(save_dir + 'fits_' + sweep_name_1 + '_' + config['save']['save_name'] + '.pkl', 'wb') as handle:
                 pickle.dump(a_save, handle)
         elapsed_time = timer() - start
         print('elapsed time',elapsed_time)
