@@ -150,6 +150,9 @@ def trimdata(f,z,f0,Q,numspan=1):
     idspan =  (f0/Q) / (f[1]-f[0])
     
     idstart = int(np.floor(np.amax([f0id - idspan*numspan,0])))
+    #print('idstart',idstart)
+    if idstart != 0: # new, 3/17/23, matlab comparison
+        idstart = idstart + 1
 
     idstop = int(np.floor(np.amin([f0id + idspan*numspan,len(f)])))+1
 
@@ -779,7 +782,7 @@ class ResonanceFitterSingleTone():
 
         z1_1 = z/(-ezinf) # z1 in matlab, renamed due to redundancy
 
-        ang = phase2(z1_1) + np.angle(-ezinf)
+        ang = np.angle(z1_1) + np.angle(-ezinf) # before: phase2(z1_1) + np.angle(-ezinf)
 
         # linear regime used with estpara # -20 dBm data and linear fit # import data to test for now
         ft, angt = trimdata(f,ang,estv['f0'],estv['Q'],numspan)
@@ -1155,6 +1158,8 @@ class ResonanceFitterSingleTonePowSweep():
 
         if ('result0' in keywords):
             self.result0 = keywords['result0']
+
+        # 3/14/23: go back to clean this up, looks to be working though
         elif self.filedir == 0: # use self.data
             #print('Fitting data at ' + str(drive_atten[kk]) + ' dBm')
             z0_mag_test =  magS21(self.data[self.indices_0][:,self.res][:,1],self.data[self.indices_0][:,self.res][:,2])
@@ -1187,25 +1192,33 @@ class ResonanceFitterSingleTonePowSweep():
                 self.result0 = ResonanceFitterSingleTone(f_temp,z_temp,self.tau,self.numspan).result
 
         #print('test',fit_pows,self.indices_0) # fit_pows = range(0,len(powlist))
+        print('fit_pows test', fit_pows)
+        print(fit_pows[0])
+        print(self.powlist)
+        print(self.indices_0)
         for kk in fit_pows: #range(0,len(self.powlist)): # self.powlist
             kk_p = self.powlist[kk]
             #print(self.powlist[fit_pows[-1]]) # -10 as expected
             print('Fitting ' + str(kk_p) + ' dBm data') # str(kk)
             if self.filedir == 0: # use self.data
+                print(self.indices_0+kk+extra_one) # this increases by 1 each time
                 data_kk = self.data[self.indices_0+kk+extra_one]
                 self.f[kk_p] = data_kk[:,self.res][:,0]
+                f_temp = self.f[kk_p]
                 z_temp = data_kk[:,self.res][:,1] + 1.j*data_kk[:,self.res][:,2]
             elif self.data == 0: # use self.filedir
                 data_kk = loadmat(self.filedir + str(kk_p) + '.0dBm.mat')
                 self.f[kk_p] = data_kk['f'][:,self.res]
+                f_temp = self.f[kk_p]
                 z_temp = data_kk['z'][:,self.res]
 
     
-            if kk==fit_pows[0]: #kk_p==self.powlist[0]:
+            if kk==fit_pows[0]: #kk_p==self.powlist[0]: # find result0 first
                 self.z0 = z_temp
                 if self.use_weight:
-                    try:
-                        self.result0 = ResonanceFitterSingleTone(f_temp_0,z_temp_0,self.tau,self.numspan,self.tone_freq_lo,self.window_width,weight_type=self.weight_type).result
+                    try: # f_temp_0 identical to f_temp I think
+                        self.result0 = ResonanceFitterSingleTone(f_temp,z_temp,self.tau,self.numspan,self.tone_freq_lo,self.window_width,weight_type=self.weight_type).result
+                        #ResonanceFitterSingleTone(f_temp_0,z_temp_0,self.tau,self.numspan,self.tone_freq_lo,self.window_width,weight_type=self.weight_type).result
                         self.fit_flag[kk_p] = 0
                         pass
                     except:
@@ -1213,7 +1226,8 @@ class ResonanceFitterSingleTonePowSweep():
                         continue
                 else:
                     try:
-                        self.result0 = ResonanceFitterSingleTone(f_temp_0,z_temp_0,self.tau,self.numspan).result
+                        self.result0 = ResonanceFitterSingleTone(f_temp,z_temp,self.tau,self.numspan).result
+                        #ResonanceFitterSingleTone(f_temp_0,z_temp_0,self.tau,self.numspan).result
                         self.fit_flag[kk_p] = 0
                         pass
                     except:
@@ -1960,7 +1974,7 @@ if __name__ == "__main__":
         # cable delay, ns # from measurements at commissioning site
         tau_per_network = [-36.2,-34.4,-34.8,-34.7,-34.6,-41.3,-39.2,\
                            -32.3,-31.,-31.,-37.4,-39.3] # no network 10
-        tau = tau_per_network[network_num] #-58.5
+        tau = -58.5 #tau_per_network[network_num] #-58.5
         
         # window to applying weighting to in fit
         if config['weight']['window_Qr'] == None:
@@ -2205,9 +2219,12 @@ if __name__ == "__main__":
             for row in rows:
                 writer.writerow(row)
         
+        print('data shape', np.shape(data_pow_sweep)) # data shape (45, 176, 657, 3), just saves all the data it finds
+        print(powlist_full)
+        print(powlist)
         a_save = {'tau': tau, 'files': files, 'drive_atten': drive_atten, 'sense_atten': sense_atten, 'tone_amps': tone_amps_all, 'data': data_pow_sweep,\
-                   'num_tones':num_tones, 'powlist': powlist, 'powlist_full': powlist_full, 'numspan': use_numspan, 'a_predict_guess': use_a_predict_guess,\
-                   'a_predict_threshold': use_a_predict_threshold, 'a_predict_flag': a_predict_flag_all, 'Pro_guess_dBm': Pro_guess_dBm_list,\
+                   'num_tones':num_tones, 'powlist': powlist, 'powlist_full': powlist_full, 'powlist_indices': indices_powlist_full, 'numspan': use_numspan,\
+                   'a_predict_guess': use_a_predict_guess,'a_predict_threshold': use_a_predict_threshold, 'a_predict_flag': a_predict_flag_all, 'Pro_guess_dBm': Pro_guess_dBm_list,\
                    'a_predict_good': a_predict_flag_good_indices, 'Pro_guess_dBm_good': Pro_guess_dBm_good_original, 'Pro_guess_dBm_good_nonan': Pro_guess_dBm_good_nonan,\
                    'Pro_guess_dBm_good_less_outliers': Pro_guess_dBm_good_less_outliers, 'Pro_guess_dBm_good_final': Pro_guess_dBm_good, 'f0_mean': f0_corr_all_from_mean,\
                    'f0_median': f0_corr_all_from_median, 'f0_mean_sorted': np.sort(f0_corr_all_from_mean),'f0_median_sorted': np.sort(f0_corr_all_from_median),\
