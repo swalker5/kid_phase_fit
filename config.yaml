@@ -14,7 +14,9 @@ save:
    save_name:     test1
    
 preview:
-   show_plots: True
+   # set to True (False) to turn each option on (off)
+   # note: probably want to turn off if fitting a lot of resonators (tone_range)
+   show_plots: False
 
 weight:
    window_Qr: 12000 # int or float, window to applying weighting to in fit, default is 12000
