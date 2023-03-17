@@ -23,8 +23,12 @@ The file `config.yaml` contains user-specified parameters to be used by `kid_pha
 
 
 The flag settings are as follows:
+
 0 = good fit, below user-defined thresholds
+
 1 = above user-defined thresholds 
+
 2 = failed fit
+
 
 Also, an empty list corresponds to a skipped fit/likely not a resonator.
