@@ -1974,7 +1974,7 @@ if __name__ == "__main__":
         # cable delay, ns # from measurements at commissioning site
         tau_per_network = [-36.2,-34.4,-34.8,-34.7,-34.6,-41.3,-39.2,\
                            -32.3,-31.,-31.,-37.4,-39.3] # no network 10
-        tau = -58.5 #tau_per_network[network_num] #-58.5
+        tau = tau_per_network[network_num] #-58.5
         
         # window to applying weighting to in fit
         if config['weight']['window_Qr'] == None:
