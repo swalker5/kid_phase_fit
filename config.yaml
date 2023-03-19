@@ -10,11 +10,13 @@ save:
    # set to True (False) to turn each option on (off)
    use_save_fig:  False
    use_save_pdf:  False
-   use_save_file: False
-   save_name:     test1
+   use_save_file: True
+   save_name:     test
    
 preview:
-   show_plots: True
+   # set to True (False) to turn each option on (off)
+   # note: probably want to turn off if fitting a lot of resonators (tone_range)
+   show_plots: False
 
 weight:
    window_Qr: 12000 # int or float, window to applying weighting to in fit, default is 12000
@@ -25,7 +27,7 @@ weight:
    weight_type:
 
 flag_settings:
-   a_predict_guess:     0.2  # float, desired nonlinearity parameter, default is 0.2
+   a_predict_guess:     0.15 # float, desired nonlinearity parameter, default is 0.2
    a_predict_threshold: 0.25 # float, percent that a_predict_guess is off from data, default is 0.2
    pherr_threshold:     0.25 # float, percent that the phase fit is off from data, default is 0.2
    pherr_threshold_num: 10   # int, number of points allowed above pherr_threshold, default is 10
@@ -40,4 +42,4 @@ fit_settings:
    # options: all # for all tones  OR 
    # any list of tones/integers OR 
    # a single tone/integer
-   tone_range: 0 #[0,1,2,3,4,5,6,7,8,9,10] #all
+   tone_range: all #[0,1,2,3,4,5,6,7,8,9,10] #all
