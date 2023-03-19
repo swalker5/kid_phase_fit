@@ -1159,43 +1159,14 @@ class ResonanceFitterSingleTonePowSweep():
         if ('result0' in keywords):
             self.result0 = keywords['result0']
 
-        # 3/14/23: go back to clean this up, looks to be working though
-        elif self.filedir == 0: # use self.data
-            #print('Fitting data at ' + str(drive_atten[kk]) + ' dBm')
-            z0_mag_test =  magS21(self.data[self.indices_0][:,self.res][:,1],self.data[self.indices_0][:,self.res][:,2])
-            z1_mag_test = magS21(self.data[self.indices_0+1][:,self.res][:,1],self.data[self.indices_0+1][:,self.res][:,2])
-
-            if (np.abs(np.mean(z0_mag_test)-np.amin(z0_mag_test)) < 2e4): # make user variable
-                extra_one = 1
-                print('USING second lowest power instead for fit')
-                print('lowest pow indice',self.indices_0+extra_one)
-                self.powlist = self.powlist[1:]
-                self.powlist_W = self.powlist_W[1:]
-                data_0 = self.data[self.indices_0+extra_one]
-                fit_pows = range(0,len(self.powlist))
-            else:
-                print('lowest pow indice',self.indices_0)
-                extra_one = 0
-                data_0 = self.data[self.indices_0] # 0
-                fit_pows = range(0,len(self.powlist))
-            f_temp_0 = data_0[:,self.res][:,0]
-            z_temp_0 = data_0[:,self.res][:,1] + 1.j*data_0[:,self.res][:,2]
-        elif self.data == 0: # use self.filedir
-            #kk = self.powlist[0] #-20 # str(kk)
-            data = loadmat(self.filedir + str(self.powlist[0]) + '.0dBm.mat') # need to make this more modular
-            f_temp = data['f'][:,self.res]
-            z_temp = data['z'][:,self.res] # tone_freq_lo=0,window_width=0
-
-            if self.use_weight:
-                self.result0 = ResonanceFitterSingleTone(f_temp,z_temp,self.tau,self.numspan,self.tone_freq_lo,self.window_width,weight_type=self.weight_type).result
-            else:
-                self.result0 = ResonanceFitterSingleTone(f_temp,z_temp,self.tau,self.numspan).result
-
         #print('test',fit_pows,self.indices_0) # fit_pows = range(0,len(powlist))
         #print('fit_pows test', fit_pows)
         #print(fit_pows[0])
         #print(self.powlist)
         #print(self.indices_0)
+        print('lowest pow indice',self.indices_0)
+        extra_one = 0
+        fit_pows = range(0,len(self.powlist))
         for kk in fit_pows: #range(0,len(self.powlist)): # self.powlist
             kk_p = self.powlist[kk]
             #print(self.powlist[fit_pows[-1]]) # -10 as expected
@@ -1212,12 +1183,13 @@ class ResonanceFitterSingleTonePowSweep():
                 f_temp = self.f[kk_p]
                 z_temp = data_kk['z'][:,self.res]
 
-    
-            if kk==fit_pows[0]: #kk_p==self.powlist[0]: # find result0 first
+            if kk==fit_pows[0]: #kk_p==self.powlist[0]: # find result0 first # fit_pows[0] = 0
                 self.z0 = z_temp
+                f_temp_0 = f_temp
+                z_temp_0 = z_temp
                 if self.use_weight:
                     try: # f_temp_0 identical to f_temp I think
-                        self.result0 = ResonanceFitterSingleTone(f_temp,z_temp,self.tau,self.numspan,self.tone_freq_lo,self.window_width,weight_type=self.weight_type).result
+                        self.result0 = ResonanceFitterSingleTone(f_temp_0,z_temp_0,self.tau,self.numspan,self.tone_freq_lo,self.window_width,weight_type=self.weight_type).result
                         #ResonanceFitterSingleTone(f_temp_0,z_temp_0,self.tau,self.numspan,self.tone_freq_lo,self.window_width,weight_type=self.weight_type).result
                         self.fit_flag[kk_p] = 0
                         pass
@@ -1226,7 +1198,7 @@ class ResonanceFitterSingleTonePowSweep():
                         continue
                 else:
                     try:
-                        self.result0 = ResonanceFitterSingleTone(f_temp,z_temp,self.tau,self.numspan).result
+                        self.result0 = ResonanceFitterSingleTone(f_temp_0,z_temp_0,self.tau,self.numspan).result
                         #ResonanceFitterSingleTone(f_temp_0,z_temp_0,self.tau,self.numspan).result
                         self.fit_flag[kk_p] = 0
                         pass
