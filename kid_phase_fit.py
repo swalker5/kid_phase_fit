@@ -1192,16 +1192,16 @@ class ResonanceFitterSingleTonePowSweep():
                 self.result0 = ResonanceFitterSingleTone(f_temp,z_temp,self.tau,self.numspan).result
 
         #print('test',fit_pows,self.indices_0) # fit_pows = range(0,len(powlist))
-        print('fit_pows test', fit_pows)
-        print(fit_pows[0])
-        print(self.powlist)
-        print(self.indices_0)
+        #print('fit_pows test', fit_pows)
+        #print(fit_pows[0])
+        #print(self.powlist)
+        #print(self.indices_0)
         for kk in fit_pows: #range(0,len(self.powlist)): # self.powlist
             kk_p = self.powlist[kk]
             #print(self.powlist[fit_pows[-1]]) # -10 as expected
             print('Fitting ' + str(kk_p) + ' dBm data') # str(kk)
             if self.filedir == 0: # use self.data
-                print(self.indices_0+kk+extra_one) # this increases by 1 each time
+                #print(self.indices_0+kk+extra_one) # this increases by 1 each time
                 data_kk = self.data[self.indices_0+kk+extra_one]
                 self.f[kk_p] = data_kk[:,self.res][:,0]
                 f_temp = self.f[kk_p]
