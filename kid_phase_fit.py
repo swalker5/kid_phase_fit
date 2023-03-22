@@ -235,6 +235,64 @@ def plot_summary_for_index(data,ii,fig=None,ax=None):
     ax[1,1].plot(data[:,ii,1],data[:,ii,2])
     ax[1,1].set(xlabel='i',ylabel='q')
     return fig,ax
+    
+
+def guess_tone_drive_atten(tone_range, powlist, a_guess, a_predict_threshold, Q_dict, Qc_dict, omega_r_dict, a_dict, E_star_dict, bif_flag_filter_dict):
+	# pick a new a_guess and guess tone drive attenuation values based on previous fits
+	
+    a_predict_flag_dict = {}
+    Pro_test_guess_dBm_dict = {}
+    Pro_test_low_dBm_dict = {}
+    a_predict_off_dict = {}
+    for ii in tone_range:
+        a_ii = a_dict[ii][1:]
+        bif_flag_filter_ii = bif_flag_filter_dict[ii]
+        if np.asarray(a_ii).size == 0:
+            E_star_2 = 0
+            a_predict = 0
+            a_predict_pow2 = 0
+            Pro_test_low = 0
+            Pro_test_low_dBm = 0
+            a_predict_off = 0
+            Pro_test_low_guess = 0
+            Pro_test_low_guess_dBm = 0
+            a_predict_flag = 1
+        elif np.asarray(a_ii)[bif_flag_filter_ii].size == 0:
+            E_star_2 = 0
+            a_predict = 0
+            a_predict_pow2 = 0
+            Pro_test_low = 0
+            Pro_test_low_dBm = 0
+            a_predict_off = 0
+            Pro_test_low_guess = 0
+            Pro_test_low_guess_dBm = 0
+            a_predict_flag = 1
+        else: # uses bif_flag_filter_ii to skip poor fits/failed fits in calculation
+            Q_0_ii = Q_dict[ii][0]
+            Qc_0_ii = Qc_dict[ii][0]
+            omega_r_0_ii = omega_r_dict[ii][0]
+            E_star_ii = E_star_dict[ii][1:]
+            E_star_2 = np.mean(np.asarray(E_star_ii)[bif_flag_filter_ii])
+            a_predict = np.asarray(a_ii)[bif_flag_filter_ii][0]
+            a_predict_pow2 = np.asarray(powlist[1:])[bif_flag_filter_ii][0]
+            Pro_test_low = Qc_0_ii*omega_r_0_ii*a_predict*E_star_2/(2.*Q_0_ii**3)
+            Pro_test_low_dBm = 10.*np.log10(Pro_test_low) + 30. # convert W to dBm
+            a_predict_off = Pro_test_low_dBm/a_predict_pow2 #self.a_predict_pow
+            Pro_test_low_guess = Qc_0_ii*omega_r_0_ii*a_guess*E_star_2/(2.*Q_0_ii**3)
+            Pro_test_low_guess_dBm = 10.*np.log10(Pro_test_low_guess) + 30. # convert W to dBm
+            if np.abs(a_predict_off-1.) > a_predict_threshold:
+                a_predict_flag = 1
+            else:
+                a_predict_flag = 0
+        a_predict_off_dict[ii] = a_predict_off
+        a_predict_flag_dict[ii] = a_predict_flag # 0 is a good guess, 1 is above threshold
+        if Pro_test_low_dBm != 0:
+            Pro_test_low_dBm_dict[ii] = -1.*Pro_test_low_dBm
+            Pro_test_guess_dBm_dict[ii] = -1.*Pro_test_low_guess_dBm
+        else:
+            Pro_test_low_dBm_dict[ii] = Pro_test_low_dBm
+            Pro_test_guess_dBm_dict[ii] = Pro_test_low_guess_dBm
+    return a_predict_off_dict, a_predict_flag_dict, Pro_test_low_dBm_dict, Pro_test_guess_dBm_dict
 
 
 class LoadVNAsweep():
@@ -709,7 +767,7 @@ class ResonanceFitterSingleTone():
 
     def fitphasenlintest2(self, ft, angt, Q, alpha, f0, phi, r, zt, **keywords):
     
-        #f0_corr = f01 - alpha*(2.*r)**2 # new, 1/13/23
+        #f0_corr = f01 - alpha*(2.*r)**2
         p0 = [Q, alpha, f0, phi] #[Q, alpha, f0_corr, phi]
         
         if self.use_weight:
@@ -1143,6 +1201,9 @@ class ResonanceFitterSingleTonePowSweep():
         self.E_star_list = []
         self.bif_list = []
         self.flag_list = []
+        self.Q_list = []
+        self.Qc_list = []
+        self.omega_r_list = []
 
         self.fit_flag = {}
         self.fit_flag_list = []
@@ -1240,6 +1301,9 @@ class ResonanceFitterSingleTonePowSweep():
             self.E_star_list.append(self.E_star[kk_p])
             self.bif_list.append(self.result[kk_p].result['bif'])
             self.flag_list.append(self.result[kk_p].result['flag']) # 0 good, 1 failed to fit data, 2 fit residuals above thresholds
+            self.Q_list.append(self.result[kk_p].result['Q'])
+            self.Qc_list.append(self.result[kk_p].result['Qc'])
+            self.omega_r_list.append(self.omega_r[kk_p])
 
             self.z1[kk_p] = removecable(self.f[kk_p],self.z[kk_p],self.tau,verbose=self.verbose)
             self.f0g[kk_p], self.Qg[kk_p], self.idf0[kk_p], self.iddf[kk_p] = estpara3(self.f[kk_p],self.z1[kk_p],verbose=self.verbose,result0=self.result0)
@@ -1273,12 +1337,12 @@ class ResonanceFitterSingleTonePowSweep():
         #print(self.bif_list[1:])
         #print('flags', np.asarray(self.bif_list[1:])[self.flag_filter].size)
         #print('pos bif', np.asarray(self.bif_list[1:])[self.bif_neg_filter].size)
-        self.bif_flag_filter = (np.asarray(self.flag_list[1:]) != 2) & (np.asarray(self.bif_list[1:]) > 0)
+        self.bif_flag_filter = (np.asarray(self.flag_list[1:]) != 2) & (np.asarray(self.flag_list[1:]) != 1) & (np.asarray(self.bif_list[1:]) > 0) # changed, 3/21/23
         print('fit success', np.asarray(self.fit_flag_list))
         print('fit flags', np.asarray(self.flag_list))
         print('all bif', np.asarray(self.bif_list))
         print('pos bif', np.asarray(self.bif_list[1:])[self.bif_flag_filter])
-        if np.asarray(self.bif_list[1:])[self.flag_filter].size == 0:
+        if np.asarray(self.bif_list[1:]).size == 0: # np.asarray(self.bif_list[1:])[self.flag_filter].size # changed, 3/21/23 
              self.E_star_2 = 0
              self.a_predict = 0
              self.a_predict_pow2 = 0
@@ -1661,7 +1725,7 @@ class ToltecLOsweep():
         self.tone_frequencies = self.nc.variables['Header.Toltec.ToneFreq'][:].data[0,:]
         self.i_raw = self.nc.variables['Data.Toltec.Is'][:].data # 4910 x 1000 array of int32
         self.q_raw = self.nc.variables['Data.Toltec.Qs'][:].data # 4910 x 1000 array of int32
-        self.f_array_hz_raw = self.make_frequency_array() # new, 12/8/22
+        self.f_array_hz_raw = self.make_frequency_array()
 
         if self.use_drive_atten:
                 self.drive_atten = self.nc.variables['Header.Toltec.DriveAtten'][:].data
@@ -1974,7 +2038,7 @@ if __name__ == "__main__":
         drive_atten = []
         sense_atten = []
         tone_amps_all = []
-        tone_freq_lo_all = [] # new, 1/23/23
+        tone_freq_lo_all = []
         for ii in range(len(files)): 
                 print('Working on file: ' + files[ii])
                 lo_sweep_ii = ToltecLOsweep(files[ii],use_drive_atten=True,use_sense_atten=True,use_tone_amps=True,save_tone_freq_lo=True,reorder_data=False)
@@ -2079,6 +2143,12 @@ if __name__ == "__main__":
         f0_corr_all_from_median = []
         fit_success_list_all = []
         flag_list_all = []
+        a_dict_all = {}
+        Q_dict_all = {}
+        Qc_dict_all = {}
+        omega_r_dict_all = {}
+        E_star_dict_all = {}
+        a_flag_filter_dict_all = {}
         
         # need to think of better fix than setting filedir to 0
         for ii in tone_range:
@@ -2118,6 +2188,15 @@ if __name__ == "__main__":
                 Pro_guess_dBm_list.append(all_fits[ii].Pro_test_low_guess_dBm)
                 fit_success_list_all.append(all_fits[ii].fit_flag_list)
                 flag_list_all.append(all_fits[ii].flag_list) # used more
+                a_dict_all[ii] = np.asarray(all_fits[ii].bif_list)
+                Q_dict_all[ii] = np.asarray(all_fits[ii].Q_list)
+                Qc_dict_all[ii] = np.asarray(all_fits[ii].Qc_list)
+                omega_r_dict_all[ii] = np.asarray(all_fits[ii].omega_r_list)
+                E_star_dict_all[ii] = np.asarray(all_fits[ii].E_star_list)
+                a_flag_filter_dict_all[ii] = np.asarray(all_fits[ii].bif_flag_filter) # one less than flag_list in len
+        
+        # a_guess_new = 0.15
+        # a, b, c, d = guess_tone_drive_atten(tone_range,powlist,a_guess_new,use_a_predict_threshold,Q_dict_all,Qc_dict_all,omega_r_dict_all,a_dict_all,E_star_dict_all,a_flag_filter_dict_all)
         
         if use_save_fig:
             plt.ioff()
@@ -2149,22 +2228,24 @@ if __name__ == "__main__":
                     pdf.savefig(ctx3,dpi=100)
                     plt.close(ctx3)
 
-        print(a_predict_flag_all)
+        print('Finished fitting all tones in tone_range')
+        #a_list_all = np.asarray(a_list_all)
+        print('a_predict flags for each tone: ', a_predict_flag_all)
         a_predict_flag_good_indices = np.where(np.asarray(a_predict_flag_all) == 0)
         Pro_guess_dBm_good = np.asarray(Pro_guess_dBm_list)[a_predict_flag_good_indices] 
         Pro_guess_dBm_good_original = Pro_guess_dBm_good
         Pro_guess_dBm_good = Pro_guess_dBm_good[~np.isnan(Pro_guess_dBm_good)]
         Pro_guess_dBm_good_nonan = Pro_guess_dBm_good
-        print('before removing a few outliers', len(Pro_guess_dBm_good))
-        Pro_guess_dBm_good = Pro_guess_dBm_good[Pro_guess_dBm_good < -5.] # 0, -5 is temporary until I'm able to improve the fits
+        print('before removing a few outliers: ', len(Pro_guess_dBm_good))
+        #Pro_guess_dBm_good = Pro_guess_dBm_good[Pro_guess_dBm_good < -5.] # 0, -5 is temporary
         Pro_guess_dBm_good_less_outliers = Pro_guess_dBm_good
-        print('after removing a few outliers', len(Pro_guess_dBm_good))
+        print('after removing a few outliers: ', len(Pro_guess_dBm_good))
         print('# of good resonator fits: ' + str(len(a_predict_flag_good_indices[0])) + ' out of ' + str(num_tones))
-        print(a_predict_flag_good_indices)
-        print(Pro_guess_dBm_good)
-        print(np.median(Pro_guess_dBm_good))
-        print(np.mean(Pro_guess_dBm_good))
-        print(np.std(Pro_guess_dBm_good))
+        print('good tones: ', np.asarray(tone_range)[a_predict_flag_good_indices])
+        print('good tone drive atten guesses: ', Pro_guess_dBm_good)
+        print('median drive atten: ', np.median(Pro_guess_dBm_good))
+        print('mean drive atten: ', np.mean(Pro_guess_dBm_good))
+        print('std drive atten: ', np.std(Pro_guess_dBm_good))
         drive_atten_best_index_mean = find_nearest_indice(powlist,np.mean(Pro_guess_dBm_good))
         drive_atten_best_index_median = find_nearest_indice(powlist,np.median(Pro_guess_dBm_good))
         
@@ -2191,9 +2272,9 @@ if __name__ == "__main__":
             for row in rows:
                 writer.writerow(row)
         
-        print('data shape', np.shape(data_pow_sweep)) # data shape (45, 176, 657, 3), just saves all the data it finds
-        print(powlist_full)
-        print(powlist)
+        #print('data shape', np.shape(data_pow_sweep)) # data shape (45, 176, 657, 3), just saves all the data it finds
+        #print(powlist_full)
+        #print(powlist)
         a_save = {'tau': tau, 'files': files, 'drive_atten': drive_atten, 'sense_atten': sense_atten, 'tone_amps': tone_amps_all, 'data': data_pow_sweep,\
                    'num_tones':num_tones, 'powlist': powlist, 'powlist_full': powlist_full, 'powlist_indices': indices_powlist_full, 'numspan': use_numspan,\
                    'a_predict_guess': use_a_predict_guess,'a_predict_threshold': use_a_predict_threshold, 'a_predict_flag': a_predict_flag_all, 'Pro_guess_dBm': Pro_guess_dBm_list,\
@@ -2202,14 +2283,16 @@ if __name__ == "__main__":
                    'f0_median': f0_corr_all_from_median, 'f0_mean_sorted': np.sort(f0_corr_all_from_mean),'f0_median_sorted': np.sort(f0_corr_all_from_median),\
                    'indices_mean_sorted': indices_mean_sorted, 'indices_median_sorted': indices_median_sorted, 'Pro_guess_dBm_mean': np.mean(Pro_guess_dBm_good),\
                    'Pro_guess_dBm_median': np.median(Pro_guess_dBm_good),'Pro_guess_dBm_std': np.std(Pro_guess_dBm_good),'drive_atten_mean': drive_atten_best_index_mean,\
-                   'drive_atten_median': drive_atten_best_index_median, 'fits': all_fits_2, 'fit_success': fit_success_list_all, 'fit_flags': flag_list_all
+                   'drive_atten_median': drive_atten_best_index_median, 'fits': all_fits_2, 'fit_success': fit_success_list_all, 'fit_flags': flag_list_all,\
+                   'a_all': a_dict_all, 'Q_all': Q_dict_all, 'Qc_all': Qc_dict_all, 'omega_r_all': omega_r_dict_all, 'E_star_all': E_star_dict_all,\
+                   'a_flag_filter': a_flag_filter_dict_all, 'tone_range': tone_range
                    }
         # is all_fits the problem? # # 'fits': all_fits, (yes, saving data in a weird format) # just saving result from class which contains fit and some other info, other variables?
         if use_save_file:
             with open(save_dir + 'fits_' + sweep_name_1 + '_' + config['save']['save_name'] + '.pkl', 'wb') as handle:
                 pickle.dump(a_save, handle)
+        print('num_tones: ', len(tone_range)) # num_tones
         elapsed_time = timer() - start
-        print('elapsed time',elapsed_time)
-        print('num_tones', num_tones)
+        print('elapsed time: ',elapsed_time)
 # d['fits'][55].result[-17].result['f0_corr']
 # example: all_fits[1].result[-17].result['flag']
