@@ -840,7 +840,7 @@ class ResonanceFitterSingleTone():
 
         z1_1 = z/(-ezinf) # z1 in matlab, renamed due to redundancy
 
-        ang = np.angle(z1_1) + np.angle(-ezinf) # before: phase2(z1_1) + np.angle(-ezinf)
+        ang = phase2(z1_1) + np.angle(-ezinf) # before: phase2(z1_1) + np.angle(-ezinf)
 
         # linear regime used with estpara # -20 dBm data and linear fit # import data to test for now
         ft, angt = trimdata(f,ang,estv['f0'],estv['Q'],numspan)
