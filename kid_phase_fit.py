@@ -5,6 +5,7 @@ SW 3/2023
 '''
 
 
+from pathlib import Path
 import math
 import cmath
 import sys
@@ -1173,6 +1174,7 @@ class ResonanceFitterSingleTonePowSweep():
             print('Fitting ' + str(kk_p) + ' dBm data') # str(kk)
             if self.filedir == 0: # use self.data
                 #print(self.indices_0+kk+extra_one) # this increases by 1 each time
+                # import pdb; pdb.set_trace();
                 data_kk = self.data[self.indices_0+kk+extra_one]
                 self.f[kk_p] = data_kk[:,self.res][:,0]
                 f_temp = self.f[kk_p]
@@ -1925,18 +1927,39 @@ class Pvna():
 if __name__ == "__main__":
         parser = argparse.ArgumentParser()
         parser.add_argument('config',help='<Required> yaml file with config settings')
+
+        parser.add_argument('--network',help='<Required> the network of data')
+        parser.add_argument('--obsnum',help='<Required> the obsnum of data')
         args = parser.parse_args()
         with open(args.config, 'r') as f:
             config = yaml.safe_load(f)
-	
         # for data
         sweep_dir_1 = config['load']['home_dir']
+
+        nw =int( args.network)
+        obsnum = int(args.obsnum)
+        sweep_patterns = [
+                f"ics/toltec{nw}/toltec{nw}_{obsnum:06d}_*targsweep.nc",
+                f"tcs/toltec{nw}/toltec{nw}_{obsnum:06d}_*targsweep.nc",
+                ]
+
+        sweep_files = []
+        for p in sweep_patterns:
+            sweep_files += list(Path(sweep_dir_1).glob(p))
+        if not sweep_files:
+            print(f"no files found for {nw=} {obsnum=}")
+            sys.exit(1)
+        print(f"run kid_phase_fit for {nw=} {obsnum=}")
+
         save_dir = config['load']['save_dir']
         fig_dir = config['load']['fig_dir']
-        sweep_name_1 = config['load']['sweep_name']
-        split_sweep = sweep_name_1.split('_')
-        network_num = int(''.join(filter(str.isdigit, split_sweep[0])))
-        print(split_sweep)
+        # sweep_name_1 = config['load']['sweep_name']
+        sweep_name_1 = f"toltec{nw}_{obsnum:06d}"
+
+        # split_sweep = sweep_name_1.split('_')
+        # network_num = int(''.join(filter(str.isdigit, split_sweep[0])))
+        # print(split_sweep)
+        network_num = nw
         print(network_num)
         
         use_save_fig = config['save']['use_save_fig'] #False
@@ -1959,8 +1982,8 @@ if __name__ == "__main__":
         use_weight_type = config['weight']['weight_type']
 
         start = timer()
-        
-        files = glob.glob(sweep_dir_1+sweep_name_1+'_*')
+        # files = glob.glob(sweep_dir_1+sweep_name_1+'_*')
+        files = [str(f) for f in sweep_files]
         files.sort()
         #files.reverse()
         print(files)
@@ -1975,9 +1998,21 @@ if __name__ == "__main__":
         sense_atten = []
         tone_amps_all = []
         tone_freq_lo_all = [] # new, 1/23/23
+        # sort the files in atten drive order
+        files_io = []
         for ii in range(len(files)): 
                 print('Working on file: ' + files[ii])
                 lo_sweep_ii = ToltecLOsweep(files[ii],use_drive_atten=True,use_sense_atten=True,use_tone_amps=True,save_tone_freq_lo=True,reorder_data=False)
+                files_io.append(lo_sweep_ii)
+                drive_atten.append(lo_sweep_ii.drive_atten)
+        files_io = [x for _, x in sorted(zip(drive_atten, files_io), key=lambda d: -d[0])]
+        # reset drive_atten
+        drive_atten = []
+
+        for lo_sweep_ii in files_io:
+#        for ii in range(len(files)): 
+                # print('Working on file: ' + files[ii])
+                # lo_sweep_ii = ToltecLOsweep(files[ii],use_drive_atten=True,use_sense_atten=True,use_tone_amps=True,save_tone_freq_lo=True,reorder_data=False)
                 data_pow_sweep.append(lo_sweep_ii.data)
                 drive_atten.append(lo_sweep_ii.drive_atten)
                 sense_atten.append(lo_sweep_ii.sense_atten)
@@ -2013,7 +2048,6 @@ if __name__ == "__main__":
             powlist = np.asarray(-1.*drive_atten[:int(powlist_end)])
         else:
             print('Invalid powlist range given')
-        
         #use_window_width = tone_freq_lo_all[0]/window_Qr
 
         intersect_powlist,indices_powlist,indices_powlist_full = np.intersect1d(powlist,powlist_full,return_indices=True)
