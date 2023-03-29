@@ -16,7 +16,7 @@ import csv
 
 
 # change filename as needed
-filename = 'drive_atten_toltec0_017068_test_phi.csv' #'drive_atten_toltec0_017068_test.csv'
+filename = 'drive_atten_toltec0_017068_test.csv'
 
 
 # read in file as pandas DataFrame
