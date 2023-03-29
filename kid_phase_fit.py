@@ -1,10 +1,11 @@
 '''
 kid_phase_fit.py
-
 SW 3/2023
 '''
 
 
+
+from pathlib import Path
 import math
 import cmath
 import sys
@@ -338,14 +339,10 @@ class Circlefit():
     def nsphere_fit_test(self,scaling): # not using axis right now # axis=-1
         """
         Fit an n-sphere to ND data.
-
         The center and radius of the n-sphere are optimized using the Coope
         method. The sphere is described by
-
         .. math::
-
            \left \lVert \vec{x} - \vec{c} \right \rVert_2 = r
-
         Parameters
         ----------
         x : array-like
@@ -359,7 +356,6 @@ class Circlefit():
             If `True`, scale and offset the data to a bounding box of -1 to
             +1 during computations for numerical stability. Default is
             `False`.
-
         Return
         ------
         r : scalar
@@ -367,7 +363,6 @@ class Circlefit():
         c : array
             An array of size `x.shape[axis]` with the optimized center of
             the best-fit n-sphere.
-
         References
         ----------
         - [Coope]_ "\ :ref:`ref-cfblanls`\ "
@@ -423,7 +418,6 @@ class ResonanceFitterSingleTone():
         2) find circle x0,y0 and radius
         3) rotate and translate to origin
         4) fit phase versus frequency to extract fr, Qr
-
         Class to load resonator data and perform a simple or 
         nonlinear phase fit (user-specified) on a single tone
     '''
@@ -432,7 +426,6 @@ class ResonanceFitterSingleTone():
                  verbose=False,**keywords):
         # f in Hz (will also work with GHz?), z is complex, tau in ns
         ''' fit the resonance following method described in Jiansong Gao thesis Appendix E
-
             data needs to be complex (like I + jQ)
         '''
 
@@ -564,7 +557,7 @@ class ResonanceFitterSingleTone():
         ezinf = zinf/np.abs(zinf)
 
         z1_1 = z/(-ezinf)
-        ang = phase2(z1_1) + np.angle(-ezinf)
+        ang = phase2(z1_1) + np.angle(-ezinf) #before: phase2(z1_1) + np.angle(-ezinf)
 
         hnumsmopts = int(np.floor((f0g/Qg/3.)/(f[1]-f[0])))
         hnumsmopts = int(np.amax([np.amin([hnumsmopts, 20]),0]))
@@ -580,7 +573,7 @@ class ResonanceFitterSingleTone():
         zm_inf = (zm[0]+zm[-1])/2.
         ezminf = zm_inf/np.abs(zm_inf)
         zm1_1 = zm/(-ezminf)
-        angm = phase2(zm1_1) + np.angle(-ezminf)
+        angm = phase2(zm1_1) + np.angle(-ezminf) #phase2(zm1_1) + np.angle(-ezminf)
     
         dangm = angm[hnumsmopts_l:len(angm)] - angm[0:len(angm)-hnumsmopts+1]
 
@@ -1234,6 +1227,7 @@ class ResonanceFitterSingleTonePowSweep():
             print('Fitting ' + str(kk_p) + ' dBm data') # str(kk)
             if self.filedir == 0: # use self.data
                 #print(self.indices_0+kk+extra_one) # this increases by 1 each time
+                # import pdb; pdb.set_trace();
                 data_kk = self.data[self.indices_0+kk+extra_one]
                 self.f[kk_p] = data_kk[:,self.res][:,0]
                 f_temp = self.f[kk_p]
@@ -1989,18 +1983,39 @@ class Pvna():
 if __name__ == "__main__":
         parser = argparse.ArgumentParser()
         parser.add_argument('config',help='<Required> yaml file with config settings')
+        
+        parser.add_argument('--network',help='<Required> the network of data')
+        parser.add_argument('--obsnum',help='<Required> the obsnum of data')
         args = parser.parse_args()
         with open(args.config, 'r') as f:
             config = yaml.safe_load(f)
-	
         # for data
         sweep_dir_1 = config['load']['home_dir']
+        
+        nw = int( args.network)
+        obsnum = int(args.obsnum)
+        sweep_patterns = [
+                f"ics/toltec{nw}/toltec{nw}_{obsnum:06d}_*targsweep.nc",
+                f"tcs/toltec{nw}/toltec{nw}_{obsnum:06d}_*targsweep.nc",
+                ]
+
+        sweep_files = []
+        for p in sweep_patterns:
+            sweep_files += list(Path(sweep_dir_1).glob(p))
+        if not sweep_files:
+            print(f"no files found for {nw=} {obsnum=}")
+            sys.exit(1)
+        print(f"run kid_phase_fit for {nw=} {obsnum=}")
+
         save_dir = config['load']['save_dir']
         fig_dir = config['load']['fig_dir']
-        sweep_name_1 = config['load']['sweep_name']
-        split_sweep = sweep_name_1.split('_')
-        network_num = int(''.join(filter(str.isdigit, split_sweep[0])))
-        print(split_sweep)
+        # sweep_name_1 = config['load']['sweep_name']
+        sweep_name_1 = f"toltec{nw}_{obsnum:06d}"
+
+        # split_sweep = sweep_name_1.split('_')
+        # network_num = int(''.join(filter(str.isdigit, split_sweep[0])))
+        # print(split_sweep)
+        network_num = nw
         print(network_num)
         
         use_save_fig = config['save']['use_save_fig'] #False
@@ -2023,8 +2038,8 @@ if __name__ == "__main__":
         use_weight_type = config['weight']['weight_type']
 
         start = timer()
-        
-        files = glob.glob(sweep_dir_1+sweep_name_1+'_*')
+        # files = glob.glob(sweep_dir_1+sweep_name_1+'_*')
+        files = [str(f) for f in sweep_files]
         files.sort()
         #files.reverse()
         print(files)
@@ -2039,14 +2054,27 @@ if __name__ == "__main__":
         sense_atten = []
         tone_amps_all = []
         tone_freq_lo_all = []
+        # sort the files in atten drive order
+        files_io = []
         for ii in range(len(files)): 
                 print('Working on file: ' + files[ii])
                 lo_sweep_ii = ToltecLOsweep(files[ii],use_drive_atten=True,use_sense_atten=True,use_tone_amps=True,save_tone_freq_lo=True,reorder_data=False)
-                data_pow_sweep.append(lo_sweep_ii.data)
+                files_io.append(lo_sweep_ii)
                 drive_atten.append(lo_sweep_ii.drive_atten)
-                sense_atten.append(lo_sweep_ii.sense_atten)
-                tone_amps_all.append(lo_sweep_ii.tone_amps)
-                tone_freq_lo_all.append(lo_sweep_ii.tone_freq_lo)
+                files_io = [x for _, x in sorted(zip(drive_atten, files_io), key=lambda d: -d[0])]
+                # reset drive_atten
+                drive_atten = []
+
+                for lo_sweep_ii in files_io:
+                # for ii in range(len(files)): 
+                    # print('Working on file: ' + files[ii])
+                    # lo_sweep_ii = ToltecLOsweep(files[ii],use_drive_atten=True,use_sense_atten=True,use_tone_amps=True,save_tone_freq_lo=True,reorder_data=False)
+        
+                    data_pow_sweep.append(lo_sweep_ii.data)
+                    drive_atten.append(lo_sweep_ii.drive_atten)
+                    sense_atten.append(lo_sweep_ii.sense_atten)
+                    tone_amps_all.append(lo_sweep_ii.tone_amps)
+                    tone_freq_lo_all.append(lo_sweep_ii.tone_freq_lo)
         drive_atten = np.asarray(drive_atten)
         sense_atten = np.asarray(sense_atten)
         tone_amps_all = np.asarray(tone_amps_all)
@@ -2077,7 +2105,6 @@ if __name__ == "__main__":
             powlist = np.asarray(-1.*drive_atten[:int(powlist_end)])
         else:
             print('Invalid powlist range given')
-        
         #use_window_width = tone_freq_lo_all[0]/window_Qr
 
         intersect_powlist,indices_powlist,indices_powlist_full = np.intersect1d(powlist,powlist_full,return_indices=True)
