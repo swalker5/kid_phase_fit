@@ -72,7 +72,11 @@ median_drive_atten_new = np.median(df['drive_atten'][loc_notzero_new])
 std_drive_atten_new = np.std(df['drive_atten'][loc_notzero_new])
 
 # use median or mean drive_atten for global value
+print('Total num of tones: ', len(df['drive_atten']))
+print('Total num of good fits/tones: ', len(df['drive_atten'][loc_notzero_new]))
 print('For global drive atten, the mean value is ' +\
  str(mean_drive_atten_new) + ' dBm')
 print('For global drive atten, the median value is ' +\
  str(median_drive_atten_new) + ' dBm')
+print('For global drive atten, the std is ' +\
+ str(std_drive_atten_new) + ' dBm')
