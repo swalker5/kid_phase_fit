@@ -1440,7 +1440,7 @@ class ResonanceFitterSingleTonePowSweep():
                 # f0 from fit
                 ax2.plot(self.result[kk].result['ang'][self.result[kk].result['f00id']],np.abs(self.z2[kk][self.result[kk].result['f00id']]),'mo')
 
-                color=next(ax2._get_lines.prop_cycler)['color'] # get most recent line color
+                color=ax2._get_lines.get_next_color() # get most recent line color
                 axs[1, 0].plot(self.f[kk],self.result[kk].result['ang'],'.')
 
                 axs[1, 0].plot(self.result[kk].result['ft'],self.result[kk].result['angt'],'o',color=color)
@@ -1667,7 +1667,7 @@ class ResonanceFitterSingleTonePowSweep():
                 pass
             else:
                 # fr vs microwave power
-                color=next(axs[0, 0]._get_lines.prop_cycler)['color']
+                color=axs[0, 0]._get_lines.get_next_color()
                 axs[0, 0].plot(kk,self.result[kk].result['f0_corr'],'o',color=color)
 
                 # Qi vs microwave power
@@ -1988,6 +1988,7 @@ if __name__ == "__main__":
         args = parser.parse_args()
         with open(args.config, 'r') as f:
             config = yaml.safe_load(f)
+            print(config)
         # for data
         sweep_dir_1 = config['load']['home_dir']
 
@@ -2006,8 +2007,8 @@ if __name__ == "__main__":
             sys.exit(1)
         print(f"run kid_phase_fit for {nw=} {obsnum=}")
 
-        save_dir = config['load']['save_dir']
-        fig_dir = config['load']['fig_dir']
+        save_dir = Path(config['load']['save_dir'])
+        fig_dir = Path(config['load']['fig_dir'])
         # sweep_name_1 = config['load']['sweep_name']
         sweep_name_1 = f"toltec{nw}_{obsnum:06d}"
 
@@ -2022,9 +2023,24 @@ if __name__ == "__main__":
         use_save_file = config['save']['use_save_file'] #False
 
         # cable delay, ns # from measurements at commissioning site
-        tau_per_network = [-36.2,-34.4,-34.8,-34.7,-34.6,-41.3,-39.2,\
-                           -32.3,-31.,-31.,-37.4,-39.3] # no network 10
-        tau = tau_per_network[network_num] #-58.5
+        # tau_per_network = [-36.2,-34.4,-34.8,-34.7,-34.6,-41.3,-39.2,\
+        #                   -32.3,-31.,-31.,-37.4,-39.3] # no network 10
+        tau_per_network_map = {
+                0: -36.2,
+                1: -34.4,
+                2: -34.8,
+                3: -34.7,
+                4: -34.6,
+                5: -41.3,
+                6: -39.2,
+                7: -32.3,
+                8: -31.,
+                9: -31.,
+                10: -31., # no connected 20240317
+                11: -37.4,
+                12: -39.3,
+                }
+        tau = tau_per_network_map[network_num] #-58.5
         
         # window to applying weighting to in fit
         if config['weight']['window_Qr'] == None:
@@ -2184,14 +2200,14 @@ if __name__ == "__main__":
                                                                      tau,numspan=use_numspan,window_width=0,\
                                                                      a_predict_guess=use_a_predict_guess,a_predict_threshold=use_a_predict_threshold,\
                                                                      pherr_threshold=use_pherr_threshold,pherr_threshold_num=use_pherr_threshold_num,\
-                                                                     save_fig=use_save_fig,save_pdf=use_save_pdf,filename=fig_dir+sweep_name_1)
+                                                                     save_fig=use_save_fig,save_pdf=use_save_pdf,filename=str(fig_dir/sweep_name_1))
                 else:
                     use_window_width = tone_freq_lo_all[0]/window_Qr
                     all_fits[ii] = ResonanceFitterSingleTonePowSweep(0,data_pow_sweep,ii,tone_freq_lo_all[0][ii],powlist_full,powlist,\
                                                                      tau,numspan=use_numspan,window_width=use_window_width[ii],\
                                                                      a_predict_guess=use_a_predict_guess,a_predict_threshold=use_a_predict_threshold,\
                                                                      pherr_threshold=use_pherr_threshold,pherr_threshold_num=use_pherr_threshold_num,\
-                                                                     save_fig=use_save_fig,save_pdf=use_save_pdf,filename=fig_dir+sweep_name_1,\
+                                                                     save_fig=use_save_fig,save_pdf=use_save_pdf,filename=str(fig_dir/sweep_name_1),\
                                                                      weight_type=use_weight_type)
                 results_all = {}
                 for jj in powlist:
@@ -2238,7 +2254,7 @@ if __name__ == "__main__":
 
         if use_save_pdf:
             plt.ioff()
-            with PdfPages(save_dir + 'fits_' + sweep_name_1 + '_' + config['save']['save_name'] + '.pdf') as pdf:
+            with PdfPages(save_dir / ('fits_' + sweep_name_1 + '_' + config['save']['save_name'] + '.pdf')) as pdf:
                 for ii in tone_range:
                     print('saving figures in pdf for res' + str(ii))
                     ctx = all_fits[ii].plot()
@@ -2291,7 +2307,7 @@ if __name__ == "__main__":
         
         csv_columns = ['tone_num','drive_atten','drive_atten_flag','fit_success','fit_flags'] # 0 is good, 1 is bag
         rows = zip(tone_range, Pro_guess_dBm_list_pos, a_predict_flag_all, fit_success_list_all, flag_list_all)
-        with open(save_dir + 'drive_atten_' + sweep_name_1 + '_' + config['save']['save_name'] + '.csv', 'w') as f: #csvfile:
+        with open(save_dir / ('drive_atten_' + sweep_name_1 + '_' + config['save']['save_name'] + '.csv'), 'w') as f: #csvfile:
             writer = csv.writer(f)
             writer.writerow(csv_columns)
             for row in rows:
@@ -2314,7 +2330,7 @@ if __name__ == "__main__":
                    }
         # is all_fits the problem? # # 'fits': all_fits, (yes, saving data in a weird format) # just saving result from class which contains fit and some other info, other variables?
         if use_save_file:
-            with open(save_dir + 'fits_' + sweep_name_1 + '_' + config['save']['save_name'] + '.pkl', 'wb') as handle:
+            with open(save_dir / ('fits_' + sweep_name_1 + '_' + config['save']['save_name'] + '.pkl'), 'wb') as handle:
                 pickle.dump(a_save, handle)
         print('num_tones: ', len(tone_range)) # num_tones
         elapsed_time = timer() - start
