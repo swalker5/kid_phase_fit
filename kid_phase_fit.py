@@ -36,6 +36,16 @@ import argparse
 plt.rcParams.update({'font.size': 14})
 
 
+
+def _get_tone_amps(nc):
+    if "Header.Toltec.ToneAmp" in nc.variables:
+        ## new change 20240316
+        toneAmps = nc.variables["Header.Toltec.ToneAmp"][:].data.T[:, 0]
+    else:
+        toneAmps = nc.variables["Header.Toltec.ToneAmps"][:].data
+    return toneAmps
+
+
 def magS21(i,q):
     return np.sqrt(i**2+q**2) # similar to np.abs
 
@@ -1725,7 +1735,7 @@ class ToltecLOsweep():
         if self.use_sense_atten:
                 self.sense_atten = self.nc.variables['Header.Toltec.SenseAtten'][:].data
         if self.use_tone_amps:
-                self.tone_amps = self.nc.variables['Header.Toltec.ToneAmps'][:].data
+                self.tone_amps = _get_tone_amps(self.nc)
         if self.save_tone_freq_lo:
                 self.tone_freq_lo = self.tone_frequencies + self.lo_freq_center
 
