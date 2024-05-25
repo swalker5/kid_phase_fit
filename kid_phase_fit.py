@@ -4,33 +4,32 @@ SW 3/2023
 '''
 
 
-from pathlib import Path
-import math
+import argparse
 import cmath
-import sys
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.signal import savgol_filter
-from scipy.io import loadmat, savemat
-from scipy import interpolate
-from tqdm import tqdm
-import numpy.ma as ma
+import csv
 import glob
+import math
+import os
 import pickle
-from scipy import linalg
-from scipy import optimize
+import sys
+from pathlib import Path
+from timeit import default_timer as timer
+
+import lmfit
+import matplotlib.pyplot as plt
+import netCDF4
+import numpy as np
+import numpy.ma as ma
 import pandas as pd
 import scipy.stats
-from scipy.optimize import curve_fit
-import lmfit
-from scipy.stats import chisquare
-import netCDF4
-from timeit import default_timer as timer
-from matplotlib.backends.backend_pdf import PdfPages
-import csv
 import yaml
-import argparse
+from matplotlib.backends.backend_pdf import PdfPages
+from scipy import interpolate, linalg, optimize
+from scipy.io import loadmat, savemat
+from scipy.optimize import curve_fit
+from scipy.signal import savgol_filter
+from scipy.stats import chisquare
+from tqdm import tqdm
 
 # set plotting fontsize
 plt.rcParams.update({'font.size': 14})
@@ -1688,6 +1687,10 @@ class ResonanceFitterSingleTonePowSweep():
 
                 # a vs microwave power
                 axs[1, 1].plot(kk,self.result[kk].result['bif'],'o')
+                axs[1, 1].axhline(self.a_predict)
+                axs[1, 1].axvline(self.a_predict_pow2, color='gray')
+                axs[1, 1].axvline(self.Pro_test_low_guess_dBm, color='red')
+
 
         axs[0, 0].set_xlabel('Drive Power (dBm)')
         axs[0, 0].set_ylabel('$f_{r}$ (Hz)')
@@ -1989,361 +1992,363 @@ class Pvna():
         plt.legend()
 
 
-if __name__ == "__main__":
-        parser = argparse.ArgumentParser()
-        parser.add_argument('config',help='<Required> yaml file with config settings')
+def do_toltec_drive_fit(config, nw, obsnum, sweep_files):
+    save_dir = Path(config['load']['save_dir'])
+    fig_dir = Path(config['load']['fig_dir'])
+    # sweep_name_1 = config['load']['sweep_name']
+    sweep_name_1 = f"toltec{nw}_{obsnum:06d}"
 
-        parser.add_argument('--network',help='<Required> the network of data')
-        parser.add_argument('--obsnum',help='<Required> the obsnum of data')
-        args = parser.parse_args()
-        with open(args.config, 'r') as f:
-            config = yaml.safe_load(f)
-            print(config)
-        # for data
-        sweep_dir_1 = config['load']['home_dir']
+    # split_sweep = sweep_name_1.split('_')
+    # network_num = int(''.join(filter(str.isdigit, split_sweep[0])))
+    # print(split_sweep)
+    network_num = nw
+    print(network_num)
+    
+    use_save_fig = config['save']['use_save_fig'] #False
+    use_save_pdf = config['save']['use_save_pdf'] #False
+    use_save_file = config['save']['use_save_file'] #False
 
-        nw = int( args.network)
-        obsnum = int(args.obsnum)
-        sweep_patterns = [
-                f"ics/toltec{nw}/toltec{nw}_{obsnum:06d}_*targsweep.nc",
-                f"tcs/toltec{nw}/toltec{nw}_{obsnum:06d}_*targsweep.nc",
-                ]
+    # cable delay, ns # from measurements at commissioning site
+    # tau_per_network = [-36.2,-34.4,-34.8,-34.7,-34.6,-41.3,-39.2,\
+    #                   -32.3,-31.,-31.,-37.4,-39.3] # no network 10
+    tau_per_network_map = {
+            0: -36.2,
+            1: -34.4,
+            2: -34.8,
+            3: -34.7,
+            4: -34.6,
+            5: -41.3,
+            6: -39.2,
+            7: -32.3,
+            8: -31.,
+            9: -31.,
+            10: -31., # no connected 20240317
+            11: -37.4,
+            12: -39.3,
+            }
+    tau = tau_per_network_map[network_num] #-58.5
+    
+    # window to applying weighting to in fit
+    if config['weight']['window_Qr'] == None:
+        print('Using default window_Qr in fit weighting')
+        window_Qr = 12000
+    else:
+        window_Qr = config['weight']['window_Qr']
 
-        sweep_files = []
-        for p in sweep_patterns:
-            sweep_files += list(Path(sweep_dir_1).glob(p))
-        if not sweep_files:
-            print(f"no files found for {nw=} {obsnum=}")
-            sys.exit(1)
-        print(f"run kid_phase_fit for {nw=} {obsnum=}")
+    # if use_weight_type == None, fit weighting is turned off
+    use_weight_type = config['weight']['weight_type']
 
-        save_dir = Path(config['load']['save_dir'])
-        fig_dir = Path(config['load']['fig_dir'])
-        # sweep_name_1 = config['load']['sweep_name']
-        sweep_name_1 = f"toltec{nw}_{obsnum:06d}"
+    start = timer()
+    # files = glob.glob(sweep_dir_1+sweep_name_1+'_*')
+    files = [str(f) for f in sweep_files]
+    files.sort()
+    #files.reverse()
+    print(files)
 
-        # split_sweep = sweep_name_1.split('_')
-        # network_num = int(''.join(filter(str.isdigit, split_sweep[0])))
-        # print(split_sweep)
-        network_num = nw
-        print(network_num)
-        
-        use_save_fig = config['save']['use_save_fig'] #False
-        use_save_pdf = config['save']['use_save_pdf'] #False
-        use_save_file = config['save']['use_save_file'] #False
+    #other_file = sweep_dir_1 + 'toltec0_017069_000_0000_2022_12_11_06_08_41_tune.nc'
+    #lo_sweep_check = ToltecLOsweep(other_file,use_drive_atten=True,use_sense_atten=True,use_tone_amps=True,reorder_data=False)
+    #print(lo_sweep_check.drive_atten)
+    ##print(lo_sweep_check.tone_amps[:])
 
-        # cable delay, ns # from measurements at commissioning site
-        # tau_per_network = [-36.2,-34.4,-34.8,-34.7,-34.6,-41.3,-39.2,\
-        #                   -32.3,-31.,-31.,-37.4,-39.3] # no network 10
-        tau_per_network_map = {
-                0: -36.2,
-                1: -34.4,
-                2: -34.8,
-                3: -34.7,
-                4: -34.6,
-                5: -41.3,
-                6: -39.2,
-                7: -32.3,
-                8: -31.,
-                9: -31.,
-                10: -31., # no connected 20240317
-                11: -37.4,
-                12: -39.3,
-                }
-        tau = tau_per_network_map[network_num] #-58.5
-        
-        # window to applying weighting to in fit
-        if config['weight']['window_Qr'] == None:
-            print('Using default window_Qr in fit weighting')
-            window_Qr = 12000
-        else:
-            window_Qr = config['weight']['window_Qr']
+    data_pow_sweep = []
+    drive_atten = []
+    sense_atten = []
+    tone_amps_all = []
+    tone_freq_lo_all = []
+    # sort the files in atten drive order
+    files_io = []
+    for ii in range(len(files)): 
+            print('Working on file: ' + files[ii])
+            lo_sweep_ii = ToltecLOsweep(files[ii],use_drive_atten=True,use_sense_atten=True,use_tone_amps=True,save_tone_freq_lo=True,reorder_data=False)
+            files_io.append(lo_sweep_ii)
+            drive_atten.append(lo_sweep_ii.drive_atten)
+    files_io = [x for _, x in sorted(zip(drive_atten, files_io), key=lambda d: -d[0])]
+    # reset drive_atten
+    drive_atten = []
 
-        # if use_weight_type == None, fit weighting is turned off
-        use_weight_type = config['weight']['weight_type']
-
-        start = timer()
-        # files = glob.glob(sweep_dir_1+sweep_name_1+'_*')
-        files = [str(f) for f in sweep_files]
-        files.sort()
-        #files.reverse()
-        print(files)
-
-        #other_file = sweep_dir_1 + 'toltec0_017069_000_0000_2022_12_11_06_08_41_tune.nc'
-        #lo_sweep_check = ToltecLOsweep(other_file,use_drive_atten=True,use_sense_atten=True,use_tone_amps=True,reorder_data=False)
-        #print(lo_sweep_check.drive_atten)
-        ##print(lo_sweep_check.tone_amps[:])
-
-        data_pow_sweep = []
-        drive_atten = []
-        sense_atten = []
-        tone_amps_all = []
-        tone_freq_lo_all = []
-        # sort the files in atten drive order
-        files_io = []
-        for ii in range(len(files)): 
-                print('Working on file: ' + files[ii])
-                lo_sweep_ii = ToltecLOsweep(files[ii],use_drive_atten=True,use_sense_atten=True,use_tone_amps=True,save_tone_freq_lo=True,reorder_data=False)
-                files_io.append(lo_sweep_ii)
-                drive_atten.append(lo_sweep_ii.drive_atten)
-        files_io = [x for _, x in sorted(zip(drive_atten, files_io), key=lambda d: -d[0])]
-        # reset drive_atten
-        drive_atten = []
-
-        for lo_sweep_ii in files_io:
+    for lo_sweep_ii in files_io:
 #        for ii in range(len(files)): 
-                # print('Working on file: ' + files[ii])
-                # lo_sweep_ii = ToltecLOsweep(files[ii],use_drive_atten=True,use_sense_atten=True,use_tone_amps=True,save_tone_freq_lo=True,reorder_data=False)
-                data_pow_sweep.append(lo_sweep_ii.data)
-                drive_atten.append(lo_sweep_ii.drive_atten)
-                sense_atten.append(lo_sweep_ii.sense_atten)
-                tone_amps_all.append(lo_sweep_ii.tone_amps)
-                tone_freq_lo_all.append(lo_sweep_ii.tone_freq_lo)
-        drive_atten = np.asarray(drive_atten)
-        sense_atten = np.asarray(sense_atten)
-        tone_amps_all = np.asarray(tone_amps_all)
-        tone_freq_lo_all = np.asarray(tone_freq_lo_all)
-        print(drive_atten)
-        print(sense_atten)
-        print(np.shape(data_pow_sweep))
-        print(np.shape(tone_amps_all))
-        print(np.shape(tone_amps_all)[1])
+            # print('Working on file: ' + files[ii])
+            # lo_sweep_ii = ToltecLOsweep(files[ii],use_drive_atten=True,use_sense_atten=True,use_tone_amps=True,save_tone_freq_lo=True,reorder_data=False)
+            data_pow_sweep.append(lo_sweep_ii.data)
+            drive_atten.append(lo_sweep_ii.drive_atten)
+            sense_atten.append(lo_sweep_ii.sense_atten)
+            tone_amps_all.append(lo_sweep_ii.tone_amps)
+            tone_freq_lo_all.append(lo_sweep_ii.tone_freq_lo)
+    drive_atten = np.asarray(drive_atten)
+    sense_atten = np.asarray(sense_atten)
+    tone_amps_all = np.asarray(tone_amps_all)
+    tone_freq_lo_all = np.asarray(tone_freq_lo_all)
+    print(drive_atten)
+    print(sense_atten)
+    print(np.shape(data_pow_sweep))
+    print(np.shape(tone_amps_all))
+    print(np.shape(tone_amps_all)[1])
+    
+    powlist_full = np.asarray(-1.*drive_atten)
+    powlist_start = config['fit_settings']['powlist_start']
+    powlist_end = config['fit_settings']['powlist_end']
+    
+    print('powlist range:', powlist_start, powlist_end)
+    if isinstance(powlist_end, (int or float)):
+        if powlist_end > 0:
+            print('powlist_end needs to be negative, multiplying by -1')
+            powlist_end = int(-1*powlist_end)
+    
+    if (powlist_start == None) and (powlist_end == None):
+        powlist = np.asarray(-1.*drive_atten)
+    elif (powlist_start != None) and (powlist_end != None):
+        powlist = np.asarray(-1.*drive_atten[int(powlist_start):int(powlist_end)])
+    elif (powlist_start != None):
+        powlist = np.asarray(-1.*drive_atten[int(powlist_start):])
+    elif (powlist_end != None):
+        powlist = np.asarray(-1.*drive_atten[:int(powlist_end)])
+    else:
+        print('Invalid powlist range given')
+    #use_window_width = tone_freq_lo_all[0]/window_Qr
+
+    intersect_powlist,indices_powlist,indices_powlist_full = np.intersect1d(powlist,powlist_full,return_indices=True)
+    print(indices_powlist_full)
+
+    num_tones = np.shape(tone_amps_all)[1]
+
+    all_fits = {}
+    all_fits_2 = {}
+    all_flags = {}
+    all_bif = {}
+
+    # desired nonlinearity parameter
+    if config['flag_settings']['a_predict_guess'] == None:
+        print('Using default a_predict_guess')
+        use_a_predict_guess = 0.2
+    else:
+        use_a_predict_guess = config['flag_settings']['a_predict_guess']
         
-        powlist_full = np.asarray(-1.*drive_atten)
-        powlist_start = config['fit_settings']['powlist_start']
-        powlist_end = config['fit_settings']['powlist_end']
+    # percent that a_predict_guess is off from data, lower will be more stringent
+    if config['flag_settings']['a_predict_threshold'] == None:
+        print('Using default a_predict_threshold')
+        use_a_predict_threshold = 0.2 
+    else:
+        use_a_predict_threshold = config['flag_settings']['a_predict_threshold']
         
-        print('powlist range:', powlist_start, powlist_end)
-        if isinstance(powlist_end, (int or float)):
-            if powlist_end > 0:
-                print('powlist_end needs to be negative, multiplying by -1')
-                powlist_end = int(-1*powlist_end)
+    # percent that the phase fit is off from data
+    if config['flag_settings']['pherr_threshold'] == None:
+        print('Using default pherr_threshold')
+        use_pherr_threshold = 0.2
+    else:
+        use_pherr_threshold = config['flag_settings']['pherr_threshold']
         
-        if (powlist_start == None) and (powlist_end == None):
-            powlist = np.asarray(-1.*drive_atten)
-        elif (powlist_start != None) and (powlist_end != None):
-            powlist = np.asarray(-1.*drive_atten[int(powlist_start):int(powlist_end)])
-        elif (powlist_start != None):
-            powlist = np.asarray(-1.*drive_atten[int(powlist_start):])
-        elif (powlist_end != None):
-            powlist = np.asarray(-1.*drive_atten[:int(powlist_end)])
-        else:
-            print('Invalid powlist range given')
-        #use_window_width = tone_freq_lo_all[0]/window_Qr
+    # number of points allowed above pherr_threshold
+    if config['flag_settings']['pherr_threshold_num'] == None:
+        print('Using default pherr_threshold_num')
+        use_pherr_threshold_num = 10 # doesn't seem to change things much
+    else:
+        use_pherr_threshold_num = int(config['flag_settings']['pherr_threshold_num'])
+        
+    # number of linewidths to fit
+    if config['fit_settings']['numspan'] == None:
+        print('Using default numspan')
+        use_numspan = 2
+    else:
+        use_numspan = int(config['fit_settings']['numspan'])
 
-        intersect_powlist,indices_powlist,indices_powlist_full = np.intersect1d(powlist,powlist_full,return_indices=True)
-        print(indices_powlist_full)
+    
+    print(np.shape(data_pow_sweep))
+    if config['fit_settings']['tone_range'] == 'all':
+        tone_range = range(0,num_tones)
+    elif isinstance(config['fit_settings']['tone_range'], list):
+        tone_range = config['fit_settings']['tone_range']
+    elif isinstance(config['fit_settings']['tone_range'], (int,float)):
+        tone_range = [int(config['fit_settings']['tone_range'])]
+    else:
+        print('Invalid tone_range specified in config')
 
-        num_tones = np.shape(tone_amps_all)[1]
+    a_predict_flag_all = []
+    Pro_guess_dBm_list = []
 
-        all_fits = {}
-        all_fits_2 = {}
-        all_flags = {}
-        all_bif = {}
-
-        # desired nonlinearity parameter
-        if config['flag_settings']['a_predict_guess'] == None:
-            print('Using default a_predict_guess')
-            use_a_predict_guess = 0.2
-        else:
-            use_a_predict_guess = config['flag_settings']['a_predict_guess']
+    f0_corr_all_from_mean = []
+    f0_corr_all_from_median = []
+    fit_success_list_all = []
+    flag_list_all = []
+    a_dict_all = {}
+    Q_dict_all = {}
+    Qc_dict_all = {}
+    omega_r_dict_all = {}
+    E_star_dict_all = {}
+    a_flag_filter_dict_all = {}
+    
+    # need to think of better fix than setting filedir to 0
+    for ii in tone_range:
+            print('Fitting res' + str(ii))
             
-        # percent that a_predict_guess is off from data, lower will be more stringent
-        if config['flag_settings']['a_predict_threshold'] == None:
-            print('Using default a_predict_threshold')
-            use_a_predict_threshold = 0.2 
-        else:
-            use_a_predict_threshold = config['flag_settings']['a_predict_threshold']
+            if use_weight_type == None:
+                all_fits[ii] = ResonanceFitterSingleTonePowSweep(0,data_pow_sweep,ii,tone_freq_lo_all[0][ii],powlist_full,powlist,\
+                                                                 tau,numspan=use_numspan,window_width=0,\
+                                                                 a_predict_guess=use_a_predict_guess,a_predict_threshold=use_a_predict_threshold,\
+                                                                 pherr_threshold=use_pherr_threshold,pherr_threshold_num=use_pherr_threshold_num,\
+                                                                 save_fig=use_save_fig,save_pdf=use_save_pdf,filename=str(fig_dir/sweep_name_1))
+            else:
+                use_window_width = tone_freq_lo_all[0]/window_Qr
+                all_fits[ii] = ResonanceFitterSingleTonePowSweep(0,data_pow_sweep,ii,tone_freq_lo_all[0][ii],powlist_full,powlist,\
+                                                                 tau,numspan=use_numspan,window_width=use_window_width[ii],\
+                                                                 a_predict_guess=use_a_predict_guess,a_predict_threshold=use_a_predict_threshold,\
+                                                                 pherr_threshold=use_pherr_threshold,pherr_threshold_num=use_pherr_threshold_num,\
+                                                                 save_fig=use_save_fig,save_pdf=use_save_pdf,filename=str(fig_dir/sweep_name_1),\
+                                                                 weight_type=use_weight_type)
+            results_all = {}
+            for jj in powlist:
+                try:
+                    results_all[jj] = all_fits[ii].result[jj].result
+                except:
+                    pass
+            all_fits_2[ii] = results_all
             
-        # percent that the phase fit is off from data
-        if config['flag_settings']['pherr_threshold'] == None:
-            print('Using default pherr_threshold')
-            use_pherr_threshold = 0.2
-        else:
-            use_pherr_threshold = config['flag_settings']['pherr_threshold']
+            if config['preview']['show_plots']:
+                all_fits[ii].plot()
+                all_fits[ii].plot_fit_results()
+                all_fits[ii].plot_iq_rect([powlist[0],powlist[-4]]) # -15, -11
             
-        # number of points allowed above pherr_threshold
-        if config['flag_settings']['pherr_threshold_num'] == None:
-            print('Using default pherr_threshold_num')
-            use_pherr_threshold_num = 10 # doesn't seem to change things much
-        else:
-            use_pherr_threshold_num = int(config['flag_settings']['pherr_threshold_num'])
-            
-        # number of linewidths to fit
-        if config['fit_settings']['numspan'] == None:
-            print('Using default numspan')
-            use_numspan = 2
-        else:
-            use_numspan = int(config['fit_settings']['numspan'])
-
-        
-        print(np.shape(data_pow_sweep))
-        if config['fit_settings']['tone_range'] == 'all':
-            tone_range = range(0,num_tones)
-        elif isinstance(config['fit_settings']['tone_range'], list):
-            tone_range = config['fit_settings']['tone_range']
-        elif isinstance(config['fit_settings']['tone_range'], (int,float)):
-            tone_range = [int(config['fit_settings']['tone_range'])]
-        else:
-            print('Invalid tone_range specified in config')
-
-        a_predict_flag_all = []
-        Pro_guess_dBm_list = []
-
-        f0_corr_all_from_mean = []
-        f0_corr_all_from_median = []
-        fit_success_list_all = []
-        flag_list_all = []
-        a_dict_all = {}
-        Q_dict_all = {}
-        Qc_dict_all = {}
-        omega_r_dict_all = {}
-        E_star_dict_all = {}
-        a_flag_filter_dict_all = {}
-        
-        # need to think of better fix than setting filedir to 0
+            # avoid using negative bif values
+            print(all_fits[ii].a_predict,all_fits[ii].a_predict_pow2,all_fits[ii].Pro_test_low_dBm)
+            print(all_fits[ii].a_predict_off)
+            a_predict_flag_all.append(all_fits[ii].a_predict_flag)
+            Pro_guess_dBm_list.append(all_fits[ii].Pro_test_low_guess_dBm)
+            fit_success_list_all.append(all_fits[ii].fit_flag_list)
+            flag_list_all.append(all_fits[ii].flag_list) # used more
+            a_dict_all[ii] = np.asarray(all_fits[ii].bif_list)
+            Q_dict_all[ii] = np.asarray(all_fits[ii].Q_list)
+            Qc_dict_all[ii] = np.asarray(all_fits[ii].Qc_list)
+            omega_r_dict_all[ii] = np.asarray(all_fits[ii].omega_r_list)
+            E_star_dict_all[ii] = np.asarray(all_fits[ii].E_star_list)
+            a_flag_filter_dict_all[ii] = np.asarray(all_fits[ii].bif_flag_filter) # one less than flag_list in len
+    
+    # a_guess_new = 0.15
+    # a, b, c, d = guess_tone_drive_atten(tone_range,powlist,a_guess_new,use_a_predict_threshold,Q_dict_all,Qc_dict_all,omega_r_dict_all,a_dict_all,E_star_dict_all,a_flag_filter_dict_all)
+    
+    if use_save_fig:
+        plt.ioff()
         for ii in tone_range:
-                print('Fitting res' + str(ii))
-                
-                if use_weight_type == None:
-                    all_fits[ii] = ResonanceFitterSingleTonePowSweep(0,data_pow_sweep,ii,tone_freq_lo_all[0][ii],powlist_full,powlist,\
-                                                                     tau,numspan=use_numspan,window_width=0,\
-                                                                     a_predict_guess=use_a_predict_guess,a_predict_threshold=use_a_predict_threshold,\
-                                                                     pherr_threshold=use_pherr_threshold,pherr_threshold_num=use_pherr_threshold_num,\
-                                                                     save_fig=use_save_fig,save_pdf=use_save_pdf,filename=str(fig_dir/sweep_name_1))
-                else:
-                    use_window_width = tone_freq_lo_all[0]/window_Qr
-                    all_fits[ii] = ResonanceFitterSingleTonePowSweep(0,data_pow_sweep,ii,tone_freq_lo_all[0][ii],powlist_full,powlist,\
-                                                                     tau,numspan=use_numspan,window_width=use_window_width[ii],\
-                                                                     a_predict_guess=use_a_predict_guess,a_predict_threshold=use_a_predict_threshold,\
-                                                                     pherr_threshold=use_pherr_threshold,pherr_threshold_num=use_pherr_threshold_num,\
-                                                                     save_fig=use_save_fig,save_pdf=use_save_pdf,filename=str(fig_dir/sweep_name_1),\
-                                                                     weight_type=use_weight_type)
-                results_all = {}
-                for jj in powlist:
-                    try:
-                        results_all[jj] = all_fits[ii].result[jj].result
-                    except:
-                        pass
-                all_fits_2[ii] = results_all
-                
-                if config['preview']['show_plots']:
-                    all_fits[ii].plot()
-                    all_fits[ii].plot_fit_results()
-                    all_fits[ii].plot_iq_rect([powlist[0],powlist[-4]]) # -15, -11
-                
-                # avoid using negative bif values
-                print(all_fits[ii].a_predict,all_fits[ii].a_predict_pow2,all_fits[ii].Pro_test_low_dBm)
-                print(all_fits[ii].a_predict_off)
-                a_predict_flag_all.append(all_fits[ii].a_predict_flag)
-                Pro_guess_dBm_list.append(all_fits[ii].Pro_test_low_guess_dBm)
-                fit_success_list_all.append(all_fits[ii].fit_flag_list)
-                flag_list_all.append(all_fits[ii].flag_list) # used more
-                a_dict_all[ii] = np.asarray(all_fits[ii].bif_list)
-                Q_dict_all[ii] = np.asarray(all_fits[ii].Q_list)
-                Qc_dict_all[ii] = np.asarray(all_fits[ii].Qc_list)
-                omega_r_dict_all[ii] = np.asarray(all_fits[ii].omega_r_list)
-                E_star_dict_all[ii] = np.asarray(all_fits[ii].E_star_list)
-                a_flag_filter_dict_all[ii] = np.asarray(all_fits[ii].bif_flag_filter) # one less than flag_list in len
+            print('saving figures for res' + str(ii))
+            ctx = all_fits[ii].plot()
+            plt.close(ctx)
         
-        # a_guess_new = 0.15
-        # a, b, c, d = guess_tone_drive_atten(tone_range,powlist,a_guess_new,use_a_predict_threshold,Q_dict_all,Qc_dict_all,omega_r_dict_all,a_dict_all,E_star_dict_all,a_flag_filter_dict_all)
-        
-        if use_save_fig:
-            plt.ioff()
+            ctx2 = all_fits[ii].plot_fit_results()
+            plt.close(ctx2)
+            
+            ctx3 = all_fits[ii].plot_iq_rect(powlist)
+            plt.close(ctx3)
+
+    if use_save_pdf:
+        plt.ioff()
+        with PdfPages(save_dir / ('fits_' + sweep_name_1 + '_' + config['save']['save_name'] + '.pdf')) as pdf:
             for ii in tone_range:
-                print('saving figures for res' + str(ii))
+                print('saving figures in pdf for res' + str(ii))
                 ctx = all_fits[ii].plot()
+                pdf.savefig(ctx,dpi=100)
                 plt.close(ctx)
-			
+            
                 ctx2 = all_fits[ii].plot_fit_results()
+                pdf.savefig(ctx2,dpi=100)
                 plt.close(ctx2)
                 
                 ctx3 = all_fits[ii].plot_iq_rect(powlist)
+                pdf.savefig(ctx3,dpi=100)
                 plt.close(ctx3)
 
-        if use_save_pdf:
-            plt.ioff()
-            with PdfPages(save_dir / ('fits_' + sweep_name_1 + '_' + config['save']['save_name'] + '.pdf')) as pdf:
-                for ii in tone_range:
-                    print('saving figures in pdf for res' + str(ii))
-                    ctx = all_fits[ii].plot()
-                    pdf.savefig(ctx,dpi=100)
-                    plt.close(ctx)
-                
-                    ctx2 = all_fits[ii].plot_fit_results()
-                    pdf.savefig(ctx2,dpi=100)
-                    plt.close(ctx2)
-                    
-                    ctx3 = all_fits[ii].plot_iq_rect(powlist)
-                    pdf.savefig(ctx3,dpi=100)
-                    plt.close(ctx3)
+    print('Finished fitting all tones in tone_range')
+    #a_list_all = np.asarray(a_list_all)
+    print('a_predict flags for each tone: ', a_predict_flag_all)
+    a_predict_flag_good_indices = np.where(np.asarray(a_predict_flag_all) == 0)
+    Pro_guess_dBm_good = np.asarray(Pro_guess_dBm_list)[a_predict_flag_good_indices] 
+    Pro_guess_dBm_good_original = Pro_guess_dBm_good
+    Pro_guess_dBm_good = Pro_guess_dBm_good[~np.isnan(Pro_guess_dBm_good)]
+    Pro_guess_dBm_good_nonan = Pro_guess_dBm_good
+    print('before removing a few outliers: ', len(Pro_guess_dBm_good))
+    #Pro_guess_dBm_good = Pro_guess_dBm_good[Pro_guess_dBm_good < -5.] # 0, -5 is temporary
+    Pro_guess_dBm_good_less_outliers = Pro_guess_dBm_good
+    print('after removing a few outliers: ', len(Pro_guess_dBm_good))
+    print('# of good resonator fits: ' + str(len(a_predict_flag_good_indices[0])) + ' out of ' + str(num_tones))
+    print('good tones: ', np.asarray(tone_range)[a_predict_flag_good_indices])
+    print('good tone drive atten guesses: ', Pro_guess_dBm_good)
+    print('median drive atten: ', np.median(Pro_guess_dBm_good))
+    print('mean drive atten: ', np.mean(Pro_guess_dBm_good))
+    print('std drive atten: ', np.std(Pro_guess_dBm_good))
+    drive_atten_best_index_mean = find_nearest_indice(powlist,np.mean(Pro_guess_dBm_good))
+    drive_atten_best_index_median = find_nearest_indice(powlist,np.median(Pro_guess_dBm_good))
+    
+    for ii in tone_range:
+        #print('res ' + str(ii))
+        if len(all_fits[ii].result) == 0:
+            f0_corr_all_from_mean.append(0)
+            f0_corr_all_from_median.append(0)
+        else:
+            f0_corr_all_from_mean.append(all_fits[ii].result[powlist[drive_atten_best_index_mean]].result['f0_corr'])
+            f0_corr_all_from_median.append(all_fits[ii].result[powlist[drive_atten_best_index_median]].result['f0_corr'])
+    indices_mean_sorted = np.argsort(f0_corr_all_from_mean)
+    indices_median_sorted = np.argsort(f0_corr_all_from_median)
+    
+    Pro_guess_dBm_list_pos = np.asarray(Pro_guess_dBm_list)
+    Pro_guess_dBm_list_neg_indices = np.where(Pro_guess_dBm_list_pos < 0)
+    Pro_guess_dBm_list_pos[Pro_guess_dBm_list_neg_indices] = -1.*Pro_guess_dBm_list_pos[Pro_guess_dBm_list_neg_indices]
+    
+    csv_columns = ['tone_num','drive_atten','drive_atten_flag','fit_success','fit_flags'] # 0 is good, 1 is bag
+    rows = zip(tone_range, Pro_guess_dBm_list_pos, a_predict_flag_all, fit_success_list_all, flag_list_all)
+    with open(save_dir / ('drive_atten_' + sweep_name_1 + '_' + config['save']['save_name'] + '.csv'), 'w') as f: #csvfile:
+        writer = csv.writer(f)
+        writer.writerow(csv_columns)
+        for row in rows:
+            writer.writerow(row)
+    
+    #print('data shape', np.shape(data_pow_sweep)) # data shape (45, 176, 657, 3), just saves all the data it finds
+    #print(powlist_full)
+    #print(powlist)
+    a_save = {'tau': tau, 'files': files, 'drive_atten': drive_atten, 'sense_atten': sense_atten, 'tone_amps': tone_amps_all, 'data': data_pow_sweep,\
+               'num_tones':num_tones, 'powlist': powlist, 'powlist_full': powlist_full, 'powlist_indices': indices_powlist_full, 'numspan': use_numspan,\
+               'a_predict_guess': use_a_predict_guess,'a_predict_threshold': use_a_predict_threshold, 'a_predict_flag': a_predict_flag_all, 'Pro_guess_dBm': Pro_guess_dBm_list,\
+               'a_predict_good': a_predict_flag_good_indices, 'Pro_guess_dBm_good': Pro_guess_dBm_good_original, 'Pro_guess_dBm_good_nonan': Pro_guess_dBm_good_nonan,\
+               'Pro_guess_dBm_good_less_outliers': Pro_guess_dBm_good_less_outliers, 'Pro_guess_dBm_good_final': Pro_guess_dBm_good, 'f0_mean': f0_corr_all_from_mean,\
+               'f0_median': f0_corr_all_from_median, 'f0_mean_sorted': np.sort(f0_corr_all_from_mean),'f0_median_sorted': np.sort(f0_corr_all_from_median),\
+               'indices_mean_sorted': indices_mean_sorted, 'indices_median_sorted': indices_median_sorted, 'Pro_guess_dBm_mean': np.mean(Pro_guess_dBm_good),\
+               'Pro_guess_dBm_median': np.median(Pro_guess_dBm_good),'Pro_guess_dBm_std': np.std(Pro_guess_dBm_good),'drive_atten_mean': drive_atten_best_index_mean,\
+               'drive_atten_median': drive_atten_best_index_median, 'fits': all_fits_2, 'fit_success': fit_success_list_all, 'fit_flags': flag_list_all,\
+               'a_all': a_dict_all, 'Q_all': Q_dict_all, 'Qc_all': Qc_dict_all, 'omega_r_all': omega_r_dict_all, 'E_star_all': E_star_dict_all,\
+               'a_flag_filter': a_flag_filter_dict_all, 'tone_range': tone_range
+               }
+    # is all_fits the problem? # # 'fits': all_fits, (yes, saving data in a weird format) # just saving result from class which contains fit and some other info, other variables?
+    if use_save_file:
+        with open(save_dir / ('fits_' + sweep_name_1 + '_' + config['save']['save_name'] + '.pkl'), 'wb') as handle:
+            pickle.dump(a_save, handle)
+    print('num_tones: ', len(tone_range)) # num_tones
+    elapsed_time = timer() - start
+    print('elapsed time: ',elapsed_time)
+    return locals()
 
-        print('Finished fitting all tones in tone_range')
-        #a_list_all = np.asarray(a_list_all)
-        print('a_predict flags for each tone: ', a_predict_flag_all)
-        a_predict_flag_good_indices = np.where(np.asarray(a_predict_flag_all) == 0)
-        Pro_guess_dBm_good = np.asarray(Pro_guess_dBm_list)[a_predict_flag_good_indices] 
-        Pro_guess_dBm_good_original = Pro_guess_dBm_good
-        Pro_guess_dBm_good = Pro_guess_dBm_good[~np.isnan(Pro_guess_dBm_good)]
-        Pro_guess_dBm_good_nonan = Pro_guess_dBm_good
-        print('before removing a few outliers: ', len(Pro_guess_dBm_good))
-        #Pro_guess_dBm_good = Pro_guess_dBm_good[Pro_guess_dBm_good < -5.] # 0, -5 is temporary
-        Pro_guess_dBm_good_less_outliers = Pro_guess_dBm_good
-        print('after removing a few outliers: ', len(Pro_guess_dBm_good))
-        print('# of good resonator fits: ' + str(len(a_predict_flag_good_indices[0])) + ' out of ' + str(num_tones))
-        print('good tones: ', np.asarray(tone_range)[a_predict_flag_good_indices])
-        print('good tone drive atten guesses: ', Pro_guess_dBm_good)
-        print('median drive atten: ', np.median(Pro_guess_dBm_good))
-        print('mean drive atten: ', np.mean(Pro_guess_dBm_good))
-        print('std drive atten: ', np.std(Pro_guess_dBm_good))
-        drive_atten_best_index_mean = find_nearest_indice(powlist,np.mean(Pro_guess_dBm_good))
-        drive_atten_best_index_median = find_nearest_indice(powlist,np.median(Pro_guess_dBm_good))
-        
-        for ii in tone_range:
-			#print('res ' + str(ii))
-            if len(all_fits[ii].result) == 0:
-                f0_corr_all_from_mean.append(0)
-                f0_corr_all_from_median.append(0)
-            else:
-                f0_corr_all_from_mean.append(all_fits[ii].result[powlist[drive_atten_best_index_mean]].result['f0_corr'])
-                f0_corr_all_from_median.append(all_fits[ii].result[powlist[drive_atten_best_index_median]].result['f0_corr'])
-        indices_mean_sorted = np.argsort(f0_corr_all_from_mean)
-        indices_median_sorted = np.argsort(f0_corr_all_from_median)
-        
-        Pro_guess_dBm_list_pos = np.asarray(Pro_guess_dBm_list)
-        Pro_guess_dBm_list_neg_indices = np.where(Pro_guess_dBm_list_pos < 0)
-        Pro_guess_dBm_list_pos[Pro_guess_dBm_list_neg_indices] = -1.*Pro_guess_dBm_list_pos[Pro_guess_dBm_list_neg_indices]
-        
-        csv_columns = ['tone_num','drive_atten','drive_atten_flag','fit_success','fit_flags'] # 0 is good, 1 is bag
-        rows = zip(tone_range, Pro_guess_dBm_list_pos, a_predict_flag_all, fit_success_list_all, flag_list_all)
-        with open(save_dir / ('drive_atten_' + sweep_name_1 + '_' + config['save']['save_name'] + '.csv'), 'w') as f: #csvfile:
-            writer = csv.writer(f)
-            writer.writerow(csv_columns)
-            for row in rows:
-                writer.writerow(row)
-        
-        #print('data shape', np.shape(data_pow_sweep)) # data shape (45, 176, 657, 3), just saves all the data it finds
-        #print(powlist_full)
-        #print(powlist)
-        a_save = {'tau': tau, 'files': files, 'drive_atten': drive_atten, 'sense_atten': sense_atten, 'tone_amps': tone_amps_all, 'data': data_pow_sweep,\
-                   'num_tones':num_tones, 'powlist': powlist, 'powlist_full': powlist_full, 'powlist_indices': indices_powlist_full, 'numspan': use_numspan,\
-                   'a_predict_guess': use_a_predict_guess,'a_predict_threshold': use_a_predict_threshold, 'a_predict_flag': a_predict_flag_all, 'Pro_guess_dBm': Pro_guess_dBm_list,\
-                   'a_predict_good': a_predict_flag_good_indices, 'Pro_guess_dBm_good': Pro_guess_dBm_good_original, 'Pro_guess_dBm_good_nonan': Pro_guess_dBm_good_nonan,\
-                   'Pro_guess_dBm_good_less_outliers': Pro_guess_dBm_good_less_outliers, 'Pro_guess_dBm_good_final': Pro_guess_dBm_good, 'f0_mean': f0_corr_all_from_mean,\
-                   'f0_median': f0_corr_all_from_median, 'f0_mean_sorted': np.sort(f0_corr_all_from_mean),'f0_median_sorted': np.sort(f0_corr_all_from_median),\
-                   'indices_mean_sorted': indices_mean_sorted, 'indices_median_sorted': indices_median_sorted, 'Pro_guess_dBm_mean': np.mean(Pro_guess_dBm_good),\
-                   'Pro_guess_dBm_median': np.median(Pro_guess_dBm_good),'Pro_guess_dBm_std': np.std(Pro_guess_dBm_good),'drive_atten_mean': drive_atten_best_index_mean,\
-                   'drive_atten_median': drive_atten_best_index_median, 'fits': all_fits_2, 'fit_success': fit_success_list_all, 'fit_flags': flag_list_all,\
-                   'a_all': a_dict_all, 'Q_all': Q_dict_all, 'Qc_all': Qc_dict_all, 'omega_r_all': omega_r_dict_all, 'E_star_all': E_star_dict_all,\
-                   'a_flag_filter': a_flag_filter_dict_all, 'tone_range': tone_range
-                   }
-        # is all_fits the problem? # # 'fits': all_fits, (yes, saving data in a weird format) # just saving result from class which contains fit and some other info, other variables?
-        if use_save_file:
-            with open(save_dir / ('fits_' + sweep_name_1 + '_' + config['save']['save_name'] + '.pkl'), 'wb') as handle:
-                pickle.dump(a_save, handle)
-        print('num_tones: ', len(tone_range)) # num_tones
-        elapsed_time = timer() - start
-        print('elapsed time: ',elapsed_time)
-# d['fits'][55].result[-17].result['f0_corr']
-# example: all_fits[1].result[-17].result['flag']
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('config',help='<Required> yaml file with config settings')
+
+    parser.add_argument('--network',help='<Required> the network of data')
+    parser.add_argument('--obsnum',help='<Required> the obsnum of data')
+    args = parser.parse_args()
+    with open(args.config, 'r') as f:
+        config = yaml.safe_load(f)
+        print(config)
+    # for data
+    sweep_dir_1 = config['load']['home_dir']
+
+    nw = int( args.network)
+    obsnum = int(args.obsnum)
+    sweep_patterns = [
+            f"ics/toltec{nw}/toltec{nw}_{obsnum:06d}_*targsweep.nc",
+            f"tcs/toltec{nw}/toltec{nw}_{obsnum:06d}_*targsweep.nc",
+            ]
+
+    sweep_files = []
+    for p in sweep_patterns:
+        sweep_files += list(Path(sweep_dir_1).glob(p))
+    if not sweep_files:
+        print(f"no files found for {nw=} {obsnum=}")
+        sys.exit(1)
+    print(f"run kid_phase_fit for {nw=} {obsnum=}")
+    do_toltec_drive_fit(config, nw, obsnum, sweep_files)
